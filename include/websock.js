@@ -51,10 +51,14 @@ function Websock() {
     "use strict";
 
     this._websocket = null;  // WebSocket object
-    this._rQ = [];           // Receive queue
     this._rQi = 0;           // Receive queue index
-    this._rQmax = 10000;     // Max receive queue size before compacting
+    this._rQlen = 0;         // Next write position in the receive queue
+    //this._rQmax = 10000;     // Max receive queue size before compacting
+    this._rQbufferSize = 1024 * 1024 * 4; // Receive queue buffer size (4 MiB)
+    this._rQmax = this._rQbufferSize / 8;
     this._sQ = [];           // Send queue
+    //this._rQ = [];           // Receive queue
+    this._rQ = new Uint8Array(this._rQbufferSize); // Receive queue
 
     this._mode = 'base64';    // Current WebSocket mode: 'binary', 'base64'
     this.maxBufferedAmount = 200;
@@ -89,7 +93,7 @@ function Websock() {
 
         // Receive Queue
         rQlen: function () {
-            return this._rQ.length - this._rQi;
+            return this._rQlen - this._rQi;
         },
 
         rQpeek8: function () {
@@ -117,6 +121,7 @@ function Websock() {
             }
         },
 
+        // TODO(directxman12): test performance with these vs a DataView
         rQshift16: function () {
             return (this._rQ[this._rQi++] << 8) +
                    this._rQ[this._rQi++];
@@ -131,7 +136,7 @@ function Websock() {
 
         rQshiftStr: function (len) {
             if (typeof(len) === 'undefined') { len = this.rQlen(); }
-            var arr = this._rQ.slice(this._rQi, this._rQi + len);
+            var arr = new Uint8Array(this._rQ.buffer, this._rQi, len);
             this._rQi += len;
             return String.fromCharCode.apply(null, arr);
         },
@@ -139,14 +144,23 @@ function Websock() {
         rQshiftBytes: function (len) {
             if (typeof(len) === 'undefined') { len = this.rQlen(); }
             this._rQi += len;
-            return this._rQ.slice(this._rQi - len, this._rQi);
+            return new Uint8Array(this._rQ.buffer, this._rQi - len, len);
+        },
+
+        rQshiftTo: function (target, len) {
+            if (len === undefined) { len = this.rQlen(); }
+            // TODO: make this just use set with views when using a ArrayBuffer to store the rQ
+            for (var i = 0, j = this._rQi; i < len; i++, j++) {
+                target[i] = this._rQ[j];
+            }
+            this._rQi += len;
         },
 
         rQslice: function (start, end) {
             if (end) {
-                return this._rQ.slice(this._rQi + start, this._rQi + end);
+                return new Uint8Array(this._rQ.buffer, this._rQi + start, end - start);
             } else {
-                return this._rQ.slice(this._rQi + start);
+                return new Uint8Array(this._rQ.buffer, this._rQi + start);
             }
         },
 
@@ -154,7 +168,7 @@ function Websock() {
         // to be available in the receive queue. Return true if we need to
         // wait (and possibly print a debug message), otherwise false.
         rQwait: function (msg, num, goback) {
-            var rQlen = this._rQ.length - this._rQi; // Skip rQlen() function call
+            var rQlen = this._rQlen - this._rQi; // Skip rQlen() function call
             if (rQlen < num) {
                 if (goback) {
                     if (this._rQi < goback) {
@@ -209,7 +223,7 @@ function Websock() {
         },
 
         init: function (protocols, ws_schema) {
-            this._rQ = [];
+            this._rQ = new Uint8Array(this._rQbufferSize);
             this._rQi = 0;
             this._sQ = [];
             this._websocket = null;
@@ -334,9 +348,8 @@ function Websock() {
             if (this._mode === 'binary') {
                 // push arraybuffer values onto the end
                 var u8 = new Uint8Array(data);
-                for (var i = 0; i < u8.length; i++) {
-                    this._rQ.push(u8[i]);
-                }
+                this._rQ.set(new Uint8Array(data), this._rQlen);
+                this._rQlen += u8.length;
             } else {
                 // base64 decode and concat to end
                 this._rQ = this._rQ.concat(Base64.decode(data, 0));
@@ -349,8 +362,26 @@ function Websock() {
                 if (this.rQlen() > 0) {
                     this._eventHandlers.message();
                     // Compact the receive queue
-                    if (this._rQ.length > this._rQmax) {
-                        this._rQ = this._rQ.slice(this._rQi);
+                    if (this._rQlen == this._rQi) {
+                        this._rQlen = 0;
+                        this._rQi = 0;
+                    } else if (this._rQlen > this._rQmax) {
+                        if (this._rQlen - this._rQi > 0.5 * this._rQbufferSize) {
+                            var old_rQbuffer = this._rQ.buffer;
+                            this._rQbufferSize *= 2;
+                            this._rQmax = this._rQbufferSize / 8;
+                            this._rQ = new Uint8Array(this._rQbufferSize);
+                            this._rQ.set(new Uint8Array(old_rQbuffer, this._rQi));
+                        } else {
+                            if (this._rQ.copyWithin) {
+                                // Firefox only, ATM
+                                this._rQ.copyWithin(0, this._rQi);
+                            } else {
+                                this._rQ.set(new Uint8Array(this._rQ.buffer, this._rQi));
+                            }
+                        }
+
+                        this._rQlen = this._rQlen - this._rQi;
                         this._rQi = 0;
                     }
                 } else {

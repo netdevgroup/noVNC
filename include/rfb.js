@@ -1559,11 +1559,21 @@ var RFB;
                     rQi += this._FBU.bytes - 1;
                 } else {
                     if (this._FBU.subencoding & 0x02) {  // Background
-                        this._FBU.background = rQ.slice(rQi, rQi + this._fb_Bpp);
+                        if (this._fb_Bpp == 1) {
+                            this._FBU.background = rQ[rQi];
+                        } else {
+                            // fb_Bpp is 4
+                            this._FBU.background = [rQ[rQi], rQ[rQi + 1], rQ[rQi + 1], rQ[rQi + 3]];
+                        }
                         rQi += this._fb_Bpp;
                     }
                     if (this._FBU.subencoding & 0x04) {  // Foreground
-                        this._FBU.foreground = rQ.slice(rQi, rQi + this._fb_Bpp);
+                        if (this._fb_Bpp == 1) {
+                            this._FBU.foreground = rQ[rQi];
+                        } else {
+                            // this._fb_Bpp is 4
+                            this._FBU.foreground = [rQ[rQi], rQ[rQi + 1], rQ[rQi + 1], rQ[rQi + 3]];
+                        }
                         rQi += this._fb_Bpp;
                     }
 
@@ -1575,7 +1585,12 @@ var RFB;
                         for (var s = 0; s < subrects; s++) {
                             var color;
                             if (this._FBU.subencoding & 0x10) {  // SubrectsColoured
-                                color = rQ.slice(rQi, rQi + this._fb_Bpp);
+                                if (this._fb_Bpp === 1) {
+                                    color = rQ[rQi];
+                                } else {
+                                    // _fb_Bpp is 4
+                                    color = [rQ[rQi], rQ[rQi + 1], rQ[rQi + 2], rQ[rQi + 3]];
+                                }
                                 rQi += this._fb_Bpp;
                             } else {
                                 color = this._FBU.foreground;
