@@ -15,7 +15,7 @@
  */
 
 /*jslint browser: true, bitwise: true */
-/*global Util, Base64 */
+/*global Util*/
 
 
 // Load Flash WebSocket emulator if needed
@@ -51,16 +51,18 @@ function Websock() {
     "use strict";
 
     this._websocket = null;  // WebSocket object
+
     this._rQi = 0;           // Receive queue index
     this._rQlen = 0;         // Next write position in the receive queue
-    //this._rQmax = 10000;     // Max receive queue size before compacting
     this._rQbufferSize = 1024 * 1024 * 4; // Receive queue buffer size (4 MiB)
     this._rQmax = this._rQbufferSize / 8;
-    this._sQ = [];           // Send queue
-    //this._rQ = [];           // Receive queue
     this._rQ = new Uint8Array(this._rQbufferSize); // Receive queue
 
-    this._mode = 'base64';    // Current WebSocket mode: 'binary', 'base64'
+    this._sQbufferSize = 1024 * 10;  // 10 KiB
+    this._sQ = new Uint8Array(this._sQbufferSize);
+    this._sQlen = 0;
+
+    this._mode = 'binary';    // Current WebSocket mode: 'binary', 'base64'
     this.maxBufferedAmount = 200;
 
     this._eventHandlers = {
@@ -73,6 +75,7 @@ function Websock() {
 
 (function () {
     "use strict";
+
     Websock.prototype = {
         // Getters and Setters
         get_sQ: function () {
@@ -112,15 +115,6 @@ function Websock() {
             this._rQi += num;
         },
 
-        rQunshift8: function (num) {
-            if (this._rQi === 0) {
-                this._rQ.unshift(num);
-            } else {
-                this._rQi--;
-                this._rQ[this._rQi] = num;
-            }
-        },
-
         // TODO(directxman12): test performance with these vs a DataView
         rQshift16: function () {
             return (this._rQ[this._rQi++] << 8) +
@@ -150,9 +144,7 @@ function Websock() {
         rQshiftTo: function (target, len) {
             if (len === undefined) { len = this.rQlen(); }
             // TODO: make this just use set with views when using a ArrayBuffer to store the rQ
-            for (var i = 0, j = this._rQi; i < len; i++, j++) {
-                target[i] = this._rQ[j];
-            }
+            target.set(new Uint8Array(this._rQ.buffer, this._rQi, len));
             this._rQi += len;
         },
 
@@ -160,7 +152,7 @@ function Websock() {
             if (end) {
                 return new Uint8Array(this._rQ.buffer, this._rQi + start, end - start);
             } else {
-                return new Uint8Array(this._rQ.buffer, this._rQi + start);
+                return new Uint8Array(this._rQ.buffer, this._rQi + start, this._rQlen - this._rQi - start);
             }
         },
 
@@ -189,9 +181,9 @@ function Websock() {
             }
 
             if (this._websocket.bufferedAmount < this.maxBufferedAmount) {
-                if (this._sQ.length > 0) {
+                if (this._sQlen > 0) {
                     this._websocket.send(this._encode_message());
-                    this._sQ = [];
+                    this._sQlen = 0;
                 }
 
                 return true;
@@ -203,8 +195,9 @@ function Websock() {
         },
 
         send: function (arr) {
-           this._sQ = this._sQ.concat(arr);
-           return this.flush();
+            this._sQ.set(arr, this._sQlen);
+            this._sQlen += arr.length;
+            return this.flush();
         },
 
         send_string: function (str) {
@@ -225,7 +218,7 @@ function Websock() {
         init: function (protocols, ws_schema) {
             this._rQ = new Uint8Array(this._rQbufferSize);
             this._rQi = 0;
-            this._sQ = [];
+            this._sQ = new Uint8Array(this._sQbufferSize);
             this._websocket = null;
 
             // Check for full typed array support
@@ -252,35 +245,21 @@ function Websock() {
 
             // Default protocols if not specified
             if (typeof(protocols) === "undefined") {
-                if (wsbt) {
-                    protocols = ['binary', 'base64'];
-                } else {
-                    protocols = 'base64';
-                }
+                protocols = 'binary';
+            }
+
+            if (protocols.length === 0 && protocols[0] === 'binary') {
+                protocols = 'binary';
             }
 
             if (!wsbt) {
-                if (protocols === 'binary') {
-                    throw new Error('WebSocket binary sub-protocol requested but not supported');
-                }
+                throw new Error("noVNC no longer supports base64 WebSockets.  " +
+                                "Please use a browser which supports binary WebSockets.");
+            }
 
-                if (typeof(protocols) === 'object') {
-                    var new_protocols = [];
-
-                    for (var i = 0; i < protocols.length; i++) {
-                        if (protocols[i] === 'binary') {
-                            Util.Error('Skipping unsupported WebSocket binary sub-protocol');
-                        } else {
-                            new_protocols.push(protocols[i]);
-                        }
-                    }
-
-                    if (new_protocols.length > 0) {
-                        protocols = new_protocols;
-                    } else {
-                        throw new Error("Only WebSocket binary sub-protocol was requested and is not supported.");
-                    }
-                }
+            if (protocols != 'binary') {
+                throw new Error("noVNC no longer supports base64 WebSockets.  Please " +
+                                "use the binary subprotocol instead");
             }
 
             return protocols;
@@ -303,9 +282,16 @@ function Websock() {
                     this._mode = this._websocket.protocol;
                     Util.Info("Server choose sub-protocol: " + this._websocket.protocol);
                 } else {
-                    this._mode = 'base64';
+                    this._mode = 'binary';
                     Util.Error('Server select no sub-protocol!: ' + this._websocket.protocol);
                 }
+
+                if (this._mode != 'binary') {
+                    throw new Error("noVNC no longer supports base64 WebSockets.  Please " +
+                                    "use the binary subprotocol instead");
+
+                }
+
                 this._eventHandlers.open();
                 Util.Debug("<< WebSock.onopen");
             }).bind(this);
@@ -335,25 +321,17 @@ function Websock() {
 
         // private methods
         _encode_message: function () {
-            if (this._mode === 'binary') {
-                // Put in a binary arraybuffer
-                return (new Uint8Array(this._sQ)).buffer;
-            } else {
-                // base64 encode
-                return Base64.encode(this._sQ);
-            }
+            // Put in a binary arraybuffer
+            //return (new Uint8Array(this._sQ)).buffer;
+            // according to the spec, you can send ArrayBufferViews with the send method
+            return new Uint8Array(this._sQ.buffer, 0, this._sQlen);
         },
 
         _decode_message: function (data) {
-            if (this._mode === 'binary') {
-                // push arraybuffer values onto the end
-                var u8 = new Uint8Array(data);
-                this._rQ.set(new Uint8Array(data), this._rQlen);
-                this._rQlen += u8.length;
-            } else {
-                // base64 decode and concat to end
-                this._rQ = this._rQ.concat(Base64.decode(data, 0));
-            }
+            // push arraybuffer values onto the end
+            var u8 = new Uint8Array(data);
+            this._rQ.set(u8, this._rQlen);
+            this._rQlen += u8.length;
         },
 
         _recv_message: function (e) {

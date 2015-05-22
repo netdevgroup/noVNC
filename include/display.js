@@ -15,6 +15,14 @@ var Display;
 (function () {
     "use strict";
 
+    var SUPPORTS_IMAGEDATA_CONSTRUCTOR = false;
+    try {
+        new ImageData(new Uint8ClampedArray(1), 1, 1);
+        SUPPORTS_IMAGEDATA_CONSTRUCTOR = true;
+    } catch (ex) {
+        // ignore failure
+    }
+
     Display = function (defaults) {
         this._drawCtx = null;
         this._c_forceCanvas = false;
@@ -617,7 +625,14 @@ var Display;
 
         _rgbxImageData: function (x, y, vx, vy, width, height, arr, offset) {
             // NB(directxman12): arr must be an Type Array view
-            var img = new ImageData(new Uint8ClampedArray(arr.buffer, 0, width * height * 4), width, height);
+            // NB(directxman12): this only works
+            var img;
+            if (SUPPORTS_IMAGEDATA_CONSTRUCTOR) {
+                img = new ImageData(new Uint8ClampedArray(arr.buffer, 0, width * height * 4), width, height);
+            } else {
+                img = this._drawCtx.createImageData(width, height);
+                img.data.set(new Uint8ClampedArray(arr.buffer, 0, width * height * 4));
+            }
             this._drawCtx.putImageData(img, x - vx, y - vy);
         },
 
