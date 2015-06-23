@@ -38,8 +38,8 @@ var RFB;
         // In preference order
         this._encodings = [
             ['COPYRECT',            0x01 ],
-            ['TIGHT',               0x07 ],
-            ['TIGHT_PNG',           -260 ],
+//            ['TIGHT',               0x07 ],
+//            ['TIGHT_PNG',           -260 ],
             ['HEXTILE',             0x05 ],
             ['RRE',                 0x02 ],
             ['RAW',                 0x00 ],
@@ -123,6 +123,10 @@ var RFB;
             'focusContainer': document,             // DOM element that captures keyboard input
             'encrypt': false,                       // Use TLS/SSL/wss encryption
             'true_color': true,                     // Request true color pixel data
+            
+            'fb_depth': 3,                          // Sets the color depth for true color mode.
+                                                    // Values can be 1, 2, and 3 byte(s).
+            
             'local_cursor': false,                  // Request locally rendered cursor
             'shared': true,                         // Request shared mode
             'view_only': false,                     // Disable client mouse/keyboard
@@ -981,23 +985,36 @@ var RFB;
                 this._true_color = false;
             }
 
-            this._display.set_true_color(this._true_color);
+            if (this._true_color) {
+                switch(this._fb_depth) {
+                  case 2: 
+                      this._fb_Bpp = 2;
+                      break;
+                  case 1: 
+                      this._fb_Bpp = 1;
+                      break;
+                  default:
+                      this._fb_Bpp   = 4;
+                      this._fb_depth = 3;
+                      break;
+                }
+            } else {
+                console.log( "Using Color Map!!!" );
+                this._fb_Bpp = 1;
+                this._fb_depth = 1;
+            }
+            
+            this._big_endian = big_endian = false;
+            //this._display.set_true_color(this._true_color);
+            this._display.set_color_model(this._fb_Bpp, this._fb_depth, big_endian, this._true_color);
             this._display.resize(this._fb_width, this._fb_height);
             this._onFBResize(this, this._fb_width, this._fb_height);
             this._keyboard.grab();
             this._mouse.grab();
 
-            if (this._true_color) {
-                this._fb_Bpp = 4;
-                this._fb_depth = 3;
-            } else {
-                this._fb_Bpp = 1;
-                this._fb_depth = 1;
-            }
-
-            var response = RFB.messages.pixelFormat(this._fb_Bpp, this._fb_depth, this._true_color);
+            var response = RFB.messages.pixelFormat(this._fb_Bpp, this._fb_depth, big_endian, this._true_color);
             response = response.concat(
-                            RFB.messages.clientEncodings(this._encodings, this._local_cursor, this._true_color));
+                            RFB.messages.clientEncodings(this._encodings, this._local_cursor, this._fb_depth));
             response = response.concat(
                             RFB.messages.fbUpdateRequests(this._display.getCleanDirtyReset(),
                                                           this._fb_width, this._fb_height));
@@ -1040,13 +1057,16 @@ var RFB;
         },
 
         _handle_set_colour_map_msg: function () {
+            console.log("SetColorMapEntries");
             Util.Debug("SetColorMapEntries");
             this._sock.rQskip8();  // Padding
 
             var first_colour = this._sock.rQshift16();
             var num_colours = this._sock.rQshift16();
             if (this._sock.rQwait('SetColorMapEntries', num_colours * 6, 6)) { return false; }
-
+            
+            // rjones - Looks like little endian is assumed here.
+            //          Even so, right-shifts are faster.
             for (var c = 0; c < num_colours; c++) {
                 var red = parseInt(this._sock.rQshift16() / 256, 10);
                 var green = parseInt(this._sock.rQshift16() / 256, 10);
@@ -1235,6 +1255,9 @@ var RFB;
         ['focusContainer', 'wo', 'dom'],        // DOM element that captures keyboard input
         ['encrypt', 'rw', 'bool'],              // Use TLS/SSL/wss encryption
         ['true_color', 'rw', 'bool'],           // Request true color pixel data
+        
+        ['fb_depth', 'rw', 'int'],              // Request true color pixel data
+        
         ['local_cursor', 'rw', 'bool'],         // Request locally rendered cursor
         ['shared', 'rw', 'bool'],               // Request shared mode
         ['view_only', 'rw', 'bool'],            // Disable client mouse/keyboard
@@ -1265,7 +1288,6 @@ var RFB;
                 this._local_cursor = true;
             } else {
                 Util.Warn("Browser does not support local cursor");
-                this._display.disableLocalCursor();
             }
         }
     };
@@ -1307,23 +1329,43 @@ var RFB;
             return arr;
         },
 
-        pixelFormat: function (bpp, depth, true_color) {
+        pixelFormat: function (Bpp, depth, big_endian, true_color) {
             var arr = [0]; // msg-type
             arr.push8(0);  // padding
             arr.push8(0);  // padding
             arr.push8(0);  // padding
 
-            arr.push8(bpp * 8); // bits-per-pixel
-            arr.push8(depth * 8); // depth
-            arr.push8(0);  // little-endian
+            arr.push8(Bpp * 8);             // bits-per-pixel
+            arr.push8(depth * 8);           // depth
+            arr.push8(big_endian ? 1 : 0);  // big-endian
             arr.push8(true_color ? 1 : 0);  // true-color
 
-            arr.push16(255);  // red-max
-            arr.push16(255);  // green-max
-            arr.push16(255);  // blue-max
-            arr.push8(16);    // red-shift
-            arr.push8(8);     // green-shift
-            arr.push8(0);     // blue-shift
+            switch(depth) {
+                case 2:
+                    arr.push16(31);   // red-max
+                    arr.push16(63);   // green-max
+                    arr.push16(31);   // blue-max
+                    arr.push8(11);    // red-shift
+                    arr.push8(5);     // green-shift
+                    arr.push8(0);     // blue-shift
+                    break;
+                case 1:
+                    arr.push16(7);    // red-max
+                    arr.push16(7);    // green-max
+                    arr.push16(3);    // blue-max
+                    arr.push8(0);     // red-shift
+                    arr.push8(3);     // green-shift
+                    arr.push8(6);     // blue-shift
+                    break;
+                default:
+                    arr.push16(255);  // red-max
+                    arr.push16(255);  // green-max
+                    arr.push16(255);  // blue-max
+                    arr.push8(16);    // red-shift
+                    arr.push8(8);     // green-shift
+                    arr.push8(0);     // blue-shift
+                    break;
+            }
 
             arr.push8(0);     // padding
             arr.push8(0);     // padding
@@ -1331,15 +1373,18 @@ var RFB;
             return arr;
         },
 
-        clientEncodings: function (encodings, local_cursor, true_color) {
+        clientEncodings: function (encodings, local_cursor, color_depth) {
             var i, encList = [];
 
             for (i = 0; i < encodings.length; i++) {
                 if (encodings[i][0] === "Cursor" && !local_cursor) {
                     Util.Debug("Skipping Cursor pseudo-encoding");
-                } else if (encodings[i][0] === "TIGHT" && !true_color) {
-                    // TODO: remove this when we have tight+non-true-color
-                    Util.Warn("Skipping tight as it is only supported with true color");
+                }
+                // TODO: Change second condtion of this statement to 
+                //           (color_depth < 2)
+                //       when 24-bit tight is working correctly.
+                else if (encodings[i][0] === "TIGHT" && color_depth !== 2) {
+                    Util.Warn("Skipping tight as it is only supported with 16-bit true color");
                 } else {
                     encList.push(encodings[i][1]);
                 }
@@ -1408,6 +1453,7 @@ var RFB;
 
     RFB.encodingHandlers = {
         RAW: function () {
+            //console.log( "Processing RAW encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
             if (this._FBU.lines === 0) {
                 this._FBU.lines = this._FBU.height;
             }
@@ -1451,6 +1497,8 @@ var RFB;
         },
 
         RRE: function () {
+            //console.log( "Processing RRE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            
             var color;
             if (this._FBU.subrects === 0) {
                 this._FBU.bytes = 4 + this._fb_Bpp;
@@ -1482,6 +1530,8 @@ var RFB;
         },
 
         HEXTILE: function () {
+            console.log( "Processing HEXTILE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            
             var rQ = this._sock.get_rQ();
             var rQi = this._sock.get_rQi();
 
@@ -1613,7 +1663,9 @@ var RFB;
         },
 
         display_tight: function (isTightPNG) {
-            if (this._fb_depth === 1) {
+            // This is not true, however, 16 or 32 bits-per-pixel is required 
+            // for JpegCompression or the GradientFilter of BasicCompression.
+            if (!(this._true_color && this._fb_depth >= 2)) {
                 this._fail("Tight protocol handler only implements true color mode");
             }
 
@@ -1631,19 +1683,20 @@ var RFB;
 
             var resetStreams = 0;
             var streamId = -1;
+            
+            var resetZStreams = function (nibble) {
+                var zlibs = this._FBU.zlibs;
+                if (nibble & 1) zlibs[0].reset();
+                if (nibble & 2) zlibs[1].reset();
+                if (nibble & 4) zlibs[2].reset();
+                if (nibble & 8) zlibs[3].reset();
+            }.bind(this);
+            
             var decompress = function (data) {
-                for (var i = 0; i < 4; i++) {
-                    if ((resetStreams >> i) & 1) {
-                        this._FBU.zlibs[i].reset();
-                        Util.Info("Reset zlib stream " + i);
-                    }
-                }
-
                 var uncompressed = this._FBU.zlibs[streamId].uncompress(data, 0);
                 if (uncompressed.status !== 0) {
                     Util.Error("Invalid data in zlib stream");
                 }
-
                 return uncompressed.data;
             }.bind(this);
 
@@ -1651,39 +1704,58 @@ var RFB;
                 // Convert indexed (palette based) image data to RGB
                 // TODO: reduce number of calculations inside loop
                 var dest = [];
-                var x, y, dp, sp;
+                var x, y, b, rp, dp, sp;
                 if (numColors === 2) {
                     var w = Math.floor((width + 7) / 8);
                     var w1 = Math.floor(width / 8);
 
                     for (y = 0; y < height; y++) {
-                        var b;
+                        rp = y * width;
                         for (x = 0; x < w1; x++) {
                             for (b = 7; b >= 0; b--) {
-                                dp = (y * width + x * 8 + 7 - b) * 3;
-                                sp = (data[y * w + x] >> b & 1) * 3;
-                                dest[dp] = palette[sp];
-                                dest[dp + 1] = palette[sp + 1];
-                                dest[dp + 2] = palette[sp + 2];
+//                                dp = (rp + x * 8 + 7 - b) * 3;
+//                                sp = (data[rp + x] >> b & 1) * 3;
+//                                dest[dp] = palette[sp];
+//                                dest[dp + 1] = palette[sp + 1];
+//                                dest[dp + 2] = palette[sp + 2];
+                                
+                                dp = (rp + x * 8 + 7 - b) * 3;
+                                sp = (data[rp + x] >> b & 1);
+                                dest[dp]     = palette[sp][0];
+                                dest[dp + 1] = palette[sp][1];
+                                dest[dp + 2] = palette[sp][2];
                             }
                         }
 
                         for (b = 7; b >= 8 - width % 8; b--) {
-                            dp = (y * width + x * 8 + 7 - b) * 3;
-                            sp = (data[y * w + x] >> b & 1) * 3;
-                            dest[dp] = palette[sp];
-                            dest[dp + 1] = palette[sp + 1];
-                            dest[dp + 2] = palette[sp + 2];
+//                            dp = (rp + x * 8 + 7 - b) * 3;
+//                            sp = (data[rp + x] >> b & 1) * 3;
+//                            dest[dp] = palette[sp];
+//                            dest[dp + 1] = palette[sp + 1];
+//                            dest[dp + 2] = palette[sp + 2];
+                            
+                            dp = (rp + x * 8 + 7 - b) * 3;
+                            sp = (data[rp + x] >> b & 1);
+                            dest[dp]     = palette[sp][0];
+                            dest[dp + 1] = palette[sp][1];
+                            dest[dp + 2] = palette[sp][2];
                         }
                     }
                 } else {
                     for (y = 0; y < height; y++) {
+                        rp = y * width;
                         for (x = 0; x < width; x++) {
-                            dp = (y * width + x) * 3;
-                            sp = data[y * width + x] * 3;
-                            dest[dp] = palette[sp];
-                            dest[dp + 1] = palette[sp + 1];
-                            dest[dp + 2] = palette[sp + 2];
+//                            dp = (rp + x) * 3;
+//                            sp = data[rp + x] * 3;
+//                            dest[dp]     = palette[sp];
+//                            dest[dp + 1] = palette[sp + 1];
+//                            dest[dp + 2] = palette[sp + 2];
+                            
+                            dp = (rp + x) * 3;
+                            sp = data[rp + x];
+                            dest[dp]     = palette[sp][0];
+                            dest[dp + 1] = palette[sp][1];
+                            dest[dp + 2] = palette[sp][2];
                         }
                     }
                 }
@@ -1717,7 +1789,23 @@ var RFB;
 
                 // Shift ctl, filter id, num colors, palette entries, and clength off
                 this._sock.rQskipBytes(3);
-                var palette = this._sock.rQshiftBytes(paletteSize);
+                
+//                var palette = this._sock.rQshiftBytes(paletteSize);
+                var palette = (function () {
+                    var sck   = this._sock,
+                        dsp   = this._display,
+                        depth = this._fb_depth,
+                        cmap  = [];
+                    for (var i = 0; i < numColors; i++) {
+                        //16-bit
+                        cmap[i] = dsp._getRgbaTight(sck.rQshiftBytes(depth));
+                        //24-bit
+                        //cmap[i] = sck.rQshiftBytes(depth);
+                    }
+                    return cmap;
+                }.bind(this))();
+                
+                
                 this._sock.rQskipBytes(clength[0]);
 
                 if (raw) {
@@ -1731,6 +1819,7 @@ var RFB;
 
                 this._display.renderQ_push({
                     'type': 'blitRgb',
+                    //'type': 'blit',
                     'data': rgb,
                     'x': this._FBU.x,
                     'y': this._FBU.y,
@@ -1762,8 +1851,12 @@ var RFB;
                     data = decompress(this._sock.rQshiftBytes(clength[1]));
                 }
 
+                // TODO: needs to be blit, but tight version.
                 this._display.renderQ_push({
-                    'type': 'blitRgb',
+                    // 16-bit
+                    'type': 'blitTight',
+                    // 24-bit
+                    //'type': 'blitRgb',
                     'data': data,
                     'x': this._FBU.x,
                     'y': this._FBU.y,
@@ -1778,6 +1871,7 @@ var RFB;
 
             // Keep tight reset bits
             resetStreams = ctl & 0xF;
+            if (resetStreams) resetZStreams(resetStreams);
 
             // Figure out filter
             ctl = ctl >> 4;
@@ -1818,14 +1912,17 @@ var RFB;
             switch (cmode) {
                 case "fill":
                     this._sock.rQskip8();  // shift off ctl
-                    var color = this._sock.rQshiftBytes(this._fb_depth);
+                    //var color = this._sock.rQshiftBytes(this._fb_depth);
                     this._display.renderQ_push({
                         'type': 'fill',
                         'x': this._FBU.x,
                         'y': this._FBU.y,
                         'width': this._FBU.width,
                         'height': this._FBU.height,
-                        'color': [color[2], color[1], color[0]]
+                        // 16-bit
+                        'color': this._sock.rQshiftBytes(this._fb_depth)
+                        // 24-bit
+                        //'color': this._display._getRgbaTight(this._sock.rQshiftBytes(this._fb_depth))
                     });
                     break;
                 case "png":
@@ -1870,8 +1967,16 @@ var RFB;
             return true;
         },
 
-        TIGHT: function () { return this._encHandlers.display_tight(false); },
-        TIGHT_PNG: function () { return this._encHandlers.display_tight(true); },
+        TIGHT: function () { 
+            console.log( "Processing TIGHT encoded rectangle @ %d-bit %s color.", 
+                    this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            return this._encHandlers.display_tight(false); 
+        },
+        TIGHT_PNG: function () { 
+            console.log( "Processing TIGHT_PNG encoded rectangle @ %d-bit %s color.", 
+                    this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            return this._encHandlers.display_tight(true); 
+        },
 
         last_rect: function () {
             this._FBU.rects = 0;

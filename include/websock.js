@@ -170,9 +170,9 @@ function Websock() {
         // Send Queue
 
         flush: function () {
-            if (this._websocket.bufferedAmount !== 0) {
-                Util.Debug("bufferedAmount: " + this._websocket.bufferedAmount);
-            }
+//            if (this._websocket.bufferedAmount !== 0) {
+//                Util.Info("bufferedAmount: " + this._websocket.bufferedAmount);
+//            }
 
             if (this._websocket.bufferedAmount < this.maxBufferedAmount) {
                 if (this._sQ.length > 0) {

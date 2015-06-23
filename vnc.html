@@ -70,7 +70,8 @@
                      style for example -->
                 <textarea id="keyboardinput" autocapitalize="off"
                     autocorrect="off" autocomplete="off" spellcheck="false"
-                    mozactionhint="Enter"></textarea>
+                    mozactionhint="Enter" onsubmit="return false;"
+                    style="ime-mode: disabled;"></textarea>
                 <div id="noVNC_extra_keys">
                     <input type="image" alt="Extra keys" src="images/showextrakeys.png"
                         id="showExtraKeysButton" class="noVNC_status_button">
@@ -154,6 +155,15 @@
                 <ul>
                     <li><input id="noVNC_encrypt" type="checkbox"> Encrypt</li>
                     <li><input id="noVNC_true_color" type="checkbox" checked> True Color</li>
+                    
+                    <li><label>
+                        <select id="noVNC_fb_depth" name="vncFbDepth">
+                            <option value="3">24-bit</option>
+                            <option value="2">16-bit</option>
+                            <option value="1">8-bit</option>
+                        </select> Color Depth</label>
+                    </li>
+                    
                     <li><input id="noVNC_cursor" type="checkbox"> Local Cursor</li>
                     <li><input id="noVNC_clip" type="checkbox"> Clip to Window</li>
                     <li><input id="noVNC_shared" type="checkbox"> Shared Mode</li>

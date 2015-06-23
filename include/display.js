@@ -83,12 +83,14 @@ var Display;
         if (this._prefer_js === null) {
             Util.Info("Prefering javascript operations");
             this._prefer_js = true;
+            // rjones 2015.06.13 - Couldn't find initialization for this anywhere.
+            this._tile16x16 = this._drawCtx.createImageData(16, 16);
         }
 
         // Determine browser support for setting the cursor via data URI scheme
         if (this._cursor_uri || this._cursor_uri === null ||
                 this._cursor_uri === undefined) {
-            this._cursor_uri = Util.browserSupportsCursorURIs();
+            this._cursor_uri = Util.browserSupportsCursorURIs(this._target);
         }
 
         Util.Debug("<< Display.constructor");
@@ -353,21 +355,18 @@ var Display;
             } else {
                 this._tile = this._drawCtx.createImageData(width, height);
             }
-
+            
             if (this._prefer_js) {
-                var bgr;
-                if (this._true_color) {
-                    bgr = color;
-                } else {
-                    bgr = this._colourMap[color[0]];
-                }
-                var red = bgr[2];
-                var green = bgr[1];
-                var blue = bgr[0];
+                var rgba = this._getRgbaColor(color),
 
-                var data = this._tile.data;
+                    red   = rgba[0],
+                    green = rgba[1],
+                    blue  = rgba[2],
+
+                    data = this._tile.data;
+                
                 for (var i = 0; i < width * height * 4; i += 4) {
-                    data[i] = red;
+                    data[i]     = red;
                     data[i + 1] = green;
                     data[i + 2] = blue;
                     data[i + 3] = 255;
@@ -380,15 +379,12 @@ var Display;
         // update sub-rectangle of the current tile
         subTile: function (x, y, w, h, color) {
             if (this._prefer_js) {
-                var bgr;
-                if (this._true_color) {
-                    bgr = color;
-                } else {
-                    bgr = this._colourMap[color[0]];
-                }
-                var red = bgr[2];
-                var green = bgr[1];
-                var blue = bgr[0];
+                var rgba = this._getRgbaColor( color );
+                
+                var red   = rgba[0];
+                var green = rgba[1];
+                var blue  = rgba[2];
+
                 var xend = x + w;
                 var yend = y + h;
 
@@ -416,22 +412,45 @@ var Display;
             }
             // else: No-op -- already done by setSubTile
         },
+        
 
         blitImage: function (x, y, width, height, arr, offset) {
-            if (this._true_color) {
-                this._bgrxImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
-            } else {
-                this._cmapImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
-            }
+//            if (this._true_color) {
+//                this._bgrxImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
+//            } else {
+//                this._cmapImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
+//            }
+            var img = this._drawCtx.createImageData(width, height);
+            var data = img.data;
+            this._writeRgbaPixels(width * height, arr, offset, data, 0);
+            this._drawCtx.putImageData(img, 
+                                       x - this._viewportLoc.x, 
+                                       y - this._viewportLoc.y);
         },
 
+        // TODO: Remove after color model is working for all encodings.
         blitRgbImage: function (x, y , width, height, arr, offset) {
-            if (this._true_color) {
-                this._rgbImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
-            } else {
-                // probably wrong?
-                this._cmapImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
-            }
+//            if (this._true_color) {
+//                this._rgbImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
+//            } else {
+//                // probably wrong?
+//                this._cmapImageData(x, y, this._viewportLoc.x, this._viewportLoc.y, width, height, arr, offset);
+//            }
+            var img = this._drawCtx.createImageData(width, height);
+            var data = img.data;
+            this._writeRgbaRgb(width * height, arr, offset, data, 0);
+            this._drawCtx.putImageData(img, 
+                                       x - this._viewportLoc.x, 
+                                       y - this._viewportLoc.y);
+        },
+        
+        blitTightImage: function (x, y , width, height, arr, offset) {
+            var img = this._drawCtx.createImageData(width, height);
+            var data = img.data;
+            this._writeRgbaTight(width * height, arr, offset, data, 0);
+            this._drawCtx.putImageData(img, 
+                                       x - this._viewportLoc.x, 
+                                       y - this._viewportLoc.y);
         },
 
         blitStringImage: function (str, x, y) {
@@ -515,6 +534,61 @@ var Display;
         get_height: function () {
             return this._fb_height;
         },
+        
+        //this._fb_Bpp, this._fb_depth, big_endian this._true_color
+        set_color_model: function (Bpp, depth, big_endian, true_color) {
+            
+            var dsply_proto = Display.prototype;
+            this._fb_Bpp   = Bpp
+            this._fb_depth = depth;
+            this._big_endian = big_endian;
+            this._true_color = true_color;
+            
+            if(!true_color) {
+                dsply_proto._getRgbaColor        = this._getRgba_map;
+                dsply_proto._writeRgbaPixels     = this._writeRgba_map;
+                return
+            }
+            
+            dsply_proto._writeRgbaRgb    = this._writeRgba_24;
+            
+            switch (depth) {
+                case 2:
+                    if (big_endian) {
+                        dsply_proto._getRgbaColor    = this._getRgba_16;
+                        dsply_proto._getRgbaTight    = this._getRgba_16;
+                        dsply_proto._writeRgbaPixels = this._writeRgba_16;
+                        dsply_proto._writeRgbaTight  = this._writeRgba_16;
+                    } else {
+                        dsply_proto._getRgbaColor    = this._getRgba_16le;
+                        dsply_proto._getRgbaTight    = this._getRgba_16le;
+                        dsply_proto._writeRgbaPixels = this._writeRgba_16le;
+                        dsply_proto._writeRgbaTight  = this._writeRgba_16le;
+                    }
+                    break;
+                case 1:
+                    dsply_proto._getRgbaColor        = this._getRgba_8;
+                    dsply_proto._writeRgbaPixels     = this._writeRgba_8;
+                    break;
+                default:
+                    if (big_endian) {
+                        //WTF!!!!  Why is 24-bit color the same for little-endian and big-endian.
+                        //         I whould have thought the byte order would be reversed, but it
+                        //         doesn't seem to be.
+                        //         Byte order does seem to be reversed for 16-bit color however.
+                        dsply_proto._getRgbaColor    = this._getRgba_32le;
+                        dsply_proto._getRgbaTight    = this._getRgba_24le;
+                        dsply_proto._writeRgbaPixels = this._writeRgba_32le;
+                        dsply_proto._writeRgbaTight  = this._writeRgba_24le;
+                    } else {
+                        dsply_proto._getRgbaColor    = this._getRgba_32le;
+                        dsply_proto._getRgbaTight    = this._getRgba_24le;
+                        dsply_proto._writeRgbaPixels = this._writeRgba_32le;
+                        dsply_proto._writeRgbaTight  = this._writeRgba_24le;
+                    }
+                    break;
+            }
+        },
 
         autoscale: function (containerWidth, containerHeight, downscaleOnly) {
             var targetAspectRatio = containerWidth / containerHeight;
@@ -573,57 +647,53 @@ var Display;
         },
 
         _setFillColor: function (color) {
-            var bgr;
-            if (this._true_color) {
-                bgr = color;
-            } else {
-                bgr = this._colourMap[color[0]];
-            }
-
-            var newStyle = 'rgb(' + bgr[2] + ',' + bgr[1] + ',' + bgr[0] + ')';
+            var rgba = this._getRgbaColor(color),
+                newStyle = 'rgb(' + rgba[0] + ',' + rgba[1] + ',' + rgba[2] + ')';
             if (newStyle !== this._prevDrawStyle) {
                 this._drawCtx.fillStyle = newStyle;
                 this._prevDrawStyle = newStyle;
             }
         },
-
-        _rgbImageData: function (x, y, vx, vy, width, height, arr, offset) {
-            var img = this._drawCtx.createImageData(width, height);
-            var data = img.data;
-            for (var i = 0, j = offset; i < width * height * 4; i += 4, j += 3) {
-                data[i]     = arr[j];
-                data[i + 1] = arr[j + 1];
-                data[i + 2] = arr[j + 2];
-                data[i + 3] = 255;  // Alpha
-            }
-            this._drawCtx.putImageData(img, x - vx, y - vy);
+        
+        /**
+         * @method _getRgbaColor
+         * @param color {Array} 
+         */
+        _getRgbaColor: function (color) {
+            
         },
-
-        _bgrxImageData: function (x, y, vx, vy, width, height, arr, offset) {
-            var img = this._drawCtx.createImageData(width, height);
-            var data = img.data;
-            for (var i = 0, j = offset; i < width * height * 4; i += 4, j += 4) {
-                data[i]     = arr[j + 2];
-                data[i + 1] = arr[j + 1];
-                data[i + 2] = arr[j];
-                data[i + 3] = 255;  // Alpha
-            }
-            this._drawCtx.putImageData(img, x - vx, y - vy);
+        _getRgbaTight: function (color) {
+            
         },
-
-        _cmapImageData: function (x, y, vx, vy, width, height, arr, offset) {
-            var img = this._drawCtx.createImageData(width, height);
-            var data = img.data;
-            var cmap = this._colourMap;
-            for (var i = 0, j = offset; i < width * height * 4; i += 4, j++) {
-                var bgr = cmap[arr[j]];
-                data[i]     = bgr[2];
-                data[i + 1] = bgr[1];
-                data[i + 2] = bgr[0];
-                data[i + 3] = 255;  // Alpha
-            }
-            this._drawCtx.putImageData(img, x - vx, y - vy);
+        _writeRgbaPixels: function (num, src, si, dst, di) {
+            Util.warn("_writeRgbaPixels is an abstract function and must be overridden.");
         },
+        _writeRgbaTight: function (num, src, si, dst, di) {
+            Util.warn("_writeRgbaTight is an abstract function and must be overridden.");
+        },
+        
+
+//        _bgrxImageData: function (x, y, vx, vy, width, height, arr, offset) {
+//            var img = this._drawCtx.createImageData(width, height);
+//            var data = img.data;
+//            this._writePixels(width * height, data, 0, arr, offset);
+//            this._drawCtx.putImageData(img, x - vx, y - vy);
+//        },
+//        
+//
+//        _cmapImageData: function (x, y, vx, vy, width, height, arr, offset) {
+//            var img = this._drawCtx.createImageData(width, height);
+//            var data = img.data;
+//            var cmap = this._colourMap;
+//            for (var i = 0, j = offset; i < width * height * 4; i += 4, j++) {
+//                var bgr = cmap[arr[j]];
+//                data[i]     = bgr[2];
+//                data[i + 1] = bgr[1];
+//                data[i + 2] = bgr[0];
+//                data[i + 3] = 255;  // Alpha
+//            }
+//            this._drawCtx.putImageData(img, x - vx, y - vy);
+//        },
 
         _scan_renderQ: function () {
             var ready = true;
@@ -639,8 +709,13 @@ var Display;
                     case 'blit':
                         this.blitImage(a.x, a.y, a.width, a.height, a.data, 0);
                         break;
+                    // TODO: Remove this case when we are sure blit will handle
+                    //       both cases correctly.
                     case 'blitRgb':
                         this.blitRgbImage(a.x, a.y, a.width, a.height, a.data, 0);
+                        break;
+                    case 'blitTight':
+                        this.blitTightImage(a.x, a.y, a.width, a.height, a.data, 0);
                         break;
                     case 'img':
                         if (a.img.complete) {
@@ -662,6 +737,188 @@ var Display;
                 requestAnimFrame(this._scan_renderQ.bind(this));
             }
         },
+        
+        
+        
+        // B8G8R8X8
+        _getRgba_32le: function (color) {
+            return [
+                    color[2],
+                    color[1],
+                    color[0],
+                    255
+                ];
+        },
+        // R8G8B8X8
+        _getRgba_32: function (color) {
+            return [
+                    color[0],
+                    color[1],
+                    color[2], 
+                    255
+                ];
+        },
+        _getRgba_24le: function (color) {
+            return [
+                    color[2],
+                    color[1],
+                    color[0],
+                    255
+                ];
+        },
+        _getRgba_24: function (color) {
+            return [
+                    color[0],
+                    color[1],
+                    color[2], 
+                    255
+                ];
+        },
+        /** 
+         * Converts a 2-element array representing a 16-bit color value in 
+         * little-endian format (GGGBBBBB RRRRRGGG) 
+         * to a 4-element array representing a single RGBA 
+         * color value with R in the low address (first element).
+         * 
+         * @param color {Array} A 2-element array representing a 16-bit color 
+         *   value with the low byte as the first element.
+         * @returns {Array} A 4-element array representing an RGBA color value 
+         *   with R in the lowest address and A in the highest address.
+         */
+        // G3B5R5G3
+        _getRgba_16le: function (color) {
+            var rgb16 = (color[1] << 8) | color[0];
+            return [
+                    ((rgb16 >>> 11) & 31) * 8,
+                    ((rgb16 >>>  5) & 63) * 4,
+                    ( rgb16         & 31) * 8,
+                    255
+                ];
+        },
+        // R5G6B5
+        _getRgba_16: function (color) {
+            var rgb16 = (color[0] << 8) | color[1];
+            return [
+                    ((rgb16 >>> 11) & 31) * 8,
+                    ((rgb16 >>>  5) & 63) * 4,
+                    ( rgb16         & 31) * 8,
+                    255
+                ];
+        }, 
+        // B2G3R3
+        _getRgba_8: function (color) {
+            return [
+                ( color         & 7) * 36,
+                ((color >>>  3) & 7) * 36,
+                ((color >>>  6) & 3) * 85,
+                255
+            ];
+        },
+        // INDEX
+        _getRgba_map: function (index) {
+            return [
+                cmap[index][0],
+                cmap[index][1],
+                cmap[index][2],
+                255
+            ];
+        },
+        
+        
+        // B8G8R8X8
+        _writeRgba_32le: function (num, src, si, dst, di) {
+            for (; di < num * 4; di += 4, si += 4) {
+                dst[di]     = src[si + 2];
+                dst[di + 1] = src[si + 1];
+                dst[di + 2] = src[si];
+                dst[di + 3] = 255;
+            }
+        },
+        // R8G8B8X8
+        _writeRgba_32: function (num, src, si, dst, di) {
+            for (; di < num * 4; di += 4, si += 4) {
+                dst[di]     = src[si];
+                dst[di + 1] = src[si + 1];
+                dst[di + 2] = src[si + 2];
+                dst[di + 3] = 255;
+            }
+        },
+        // B8G8R8 
+        _writeRgba_24le: function (num, src, si, dst, di) {
+            for (; di < num * 4; di += 4, si += 3) {
+                dst[di]     = src[si + 2];
+                dst[di + 1] = src[si + 1];
+                dst[di + 2] = src[si];
+                dst[di + 3] = 255;
+            }
+        },
+        // R8G8B8
+        _writeRgba_24: function (num, src, si, dst, di) {
+            for (; di < num * 4; di += 4, si += 3) {
+                dst[di]     = src[si];
+                dst[di + 1] = src[si + 1];
+                dst[di + 2] = src[si + 2];
+                dst[di + 3] = 255;
+            }
+        },
+        // G3B5R5G3
+        _writeRgba_16le: function (num, src, si, dst, di) {
+            var rgb16;
+            for (; di < num * 4; di += 4, si += 2) {
+                rgb16 = (src[si + 1] << 8) | src[si];
+                dst[di]     = ((rgb16 >>> 11) & 31) * 8;
+                dst[di + 1] = ((rgb16 >>>  5) & 63) * 4;
+                dst[di + 2] = ( rgb16         & 31) * 8;
+                dst[di + 3] = 255;
+            }
+        },
+        // R5G6B5
+        _writeRgba_16: function (num, src, si, dst, di) {
+            var rgb16;
+            for (; di < num * 4; di += 4, si += 2) {
+                rgb16 = (src[si] << 8) | src[si + 1];
+                dst[di]     = ((rgb16 >>> 11) & 31) * 8;
+                dst[di + 1] = ((rgb16 >>>  5) & 63) * 4;
+                dst[di + 2] = ( rgb16         & 31) * 8;
+                dst[di + 3] = 255;
+            }
+        },
+        // B2G3R3
+        _writeRgba_8: function (num, src, si, dst, di) {
+            var bgr8;
+            for (; di < num * 4; di += 4, si += 1) {
+                bgr8 = src[si];
+                dst[di]     = ( bgr8         & 7) * 36;
+                dst[di + 1] = ((bgr8 >>>  3) & 7) * 36;
+                dst[di + 2] = ((bgr8 >>>  6) & 3) * 85;
+                dst[di + 3] = 255;
+            }
+        },
+        // COLOR MAP
+        _writeRgba_map: function (num, src, si, dst, di) {
+            var color
+            for (; di < num * 4; di += 4, si += 1) {
+                color = cmap[src[si]];
+                dst[di]     = color[0];
+                dst[di + 1] = color[1];
+                dst[di + 2] = color[2];
+                dst[di + 3] = 255;
+            }
+        },
+        
+        
+        _rgbImageData: function (x, y, vx, vy, width, height, arr, offset) {
+            var img = this._drawCtx.createImageData(width, height);
+            var data = img.data;
+            for (var i = 0, j = offset; i < width * height * 4; i += 4, j += 3) {
+                data[i]     = arr[j];
+                data[i + 1] = arr[j + 1];
+                data[i + 2] = arr[j + 2];
+                data[i + 3] = 255;  // Alpha
+            }
+            this._drawCtx.putImageData(img, x - vx, y - vy);
+        }
+        
     };
 
     Util.make_properties(Display, [
@@ -679,7 +936,7 @@ var Display;
 
         ['render_mode', 'ro', 'str'],  // Canvas rendering mode (read-only)
 
-        ['prefer_js', 'rw', 'str'],    // Prefer Javascript over canvas methods
+        ['prefer_js', 'rw', 'bool'],   // Prefer Javascript over canvas methods
         ['cursor_uri', 'rw', 'raw']    // Can we render cursor using data URI
     ]);
 
@@ -761,7 +1018,7 @@ var Display;
                         cur.push(rgb[0]);  // red
                         cur.push(alpha);   // alpha
                     } else {
-                        idx = ((w0 * y) + x) * 4;
+                        idx = ((w0 * y) + x) * 4;  //this.fb_depth;
                         cur.push(pixels[idx + 2]); // blue
                         cur.push(pixels[idx + 1]); // green
                         cur.push(pixels[idx]);     // red
@@ -790,4 +1047,32 @@ var Display;
         var url = 'data:image/x-icon;base64,' + Base64.encode(cur);
         target.style.cursor = 'url(' + url + ')' + hotx + ' ' + hoty + ', default';
     };
+    
+    // 
+    Display.colorModel = function (Bpp, depth, big_endian, true_color) {
+        
+        var _bytesPerPixel = Bpp,
+            _colorDepth    = depth,
+            _bigEndian     = big_endian,
+            _trueColor     = true_color,
+            _colorMap      = [];
+        
+        function isClientBigEndian () {
+            var b = new ArrayBuffer(2);
+            var a = new Uint16Array(b);
+            var c = new Uint8Array(b);
+            a[0] = 0xABCD;
+            if (c[0] == 0xAB) return true;
+            return false;
+        }
+        
+        return {
+            getRgbaColor:    _getRgbaColor,
+            getRgbaTight:    _getRgbaTight,
+            writeRgbaPixels: _writeRgbaPixels,
+            writeRgbaTight:  _writeRgbaTight
+        };
+    };
+    
+    
 })();

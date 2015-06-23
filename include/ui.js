@@ -90,6 +90,9 @@ var UI;
             UI.initSetting('password', '');
             UI.initSetting('encrypt', (window.location.protocol === "https:"));
             UI.initSetting('true_color', true);
+            
+            UI.initSetting('fb_depth', 3);
+            
             UI.initSetting('cursor', !UI.isTouchDevice);
             UI.initSetting('resize', 'off');
             UI.initSetting('shared', true);
@@ -175,6 +178,8 @@ var UI;
         },
 
         addMouseHandlers: function() {
+            var connected = UI.rfb && UI.rfb_state === 'normal';
+          
             // Setup interface handlers that can't be inline
             $D("noVNC_view_drag_button").onclick = UI.setViewDrag;
             $D("noVNC_mouse_button0").onclick = function () { UI.setMouseButton(1); };
@@ -185,7 +190,6 @@ var UI;
 
             $D("keyboardinput").oninput = UI.keyInput;
             $D("keyboardinput").onblur = UI.keyInputBlur;
-            $D("keyboardinput").onsubmit = function () { return false; };
 
             $D("showExtraKeysButton").onclick = UI.showExtraKeys;
             $D("toggleCtrlButton").onclick = UI.toggleCtrl;
@@ -218,8 +222,12 @@ var UI;
             $D("noVNC_connect_button").onclick = UI.connect;
 
             $D("noVNC_resize").onchange = function () {
-                var connected = UI.rfb && UI.rfb_state === 'normal';
                 UI.enableDisableClip(connected);
+            };
+            
+            $D("noVNC_true_color").onclick = function () {
+              $D("noVNC_fb_depth").disabled =  !$D("noVNC_true_color").checked 
+                                            || connected;
             };
         },
 
@@ -487,6 +495,9 @@ var UI;
             } else {
                 UI.updateSetting('encrypt');
                 UI.updateSetting('true_color');
+                
+                UI.updateSetting('fb_depth');
+                
                 if (Util.browserSupportsCursorURIs()) {
                     UI.updateSetting('cursor');
                 } else {
@@ -543,6 +554,9 @@ var UI;
             //Util.Debug(">> settingsApply");
             UI.saveSetting('encrypt');
             UI.saveSetting('true_color');
+            
+            UI.saveSetting('fb_depth');
+            
             if (Util.browserSupportsCursorURIs()) {
                 UI.saveSetting('cursor');
             }
@@ -664,6 +678,10 @@ var UI;
             //Util.Debug(">> updateVisualState");
             $D('noVNC_encrypt').disabled = connected;
             $D('noVNC_true_color').disabled = connected;
+            
+            $D('noVNC_fb_depth').disabled =  !$D("noVNC_true_color").checked
+                                          || connected;
+            
             if (Util.browserSupportsCursorURIs()) {
                 $D('noVNC_cursor').disabled = connected;
             } else {
@@ -783,6 +801,9 @@ var UI;
 
             UI.rfb.set_encrypt(UI.getSetting('encrypt'));
             UI.rfb.set_true_color(UI.getSetting('true_color'));
+            
+            UI.rfb.set_fb_depth(UI.getSetting('fb_depth'));
+            
             UI.rfb.set_local_cursor(UI.getSetting('cursor'));
             UI.rfb.set_shared(UI.getSetting('shared'));
             UI.rfb.set_view_only(UI.getSetting('view_only'));
@@ -965,7 +986,7 @@ var UI;
             if (!UI.lastKeyboardinput) {
                 UI.keyboardinputReset();
             }
-            var oldValue = UI.lastKeyboardinput;
+            var oldvalue = UI.lastKeyboardinput;
 
             var newLen;
             try {
