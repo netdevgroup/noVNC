@@ -89,6 +89,9 @@ var UI;
             UI.initSetting('port', port);
             UI.initSetting('password', '');
             UI.initSetting('encrypt', (window.location.protocol === "https:"));
+            
+            UI.initSetting('locale', 'en_US');
+            
             UI.initSetting('true_color', true);
             
             UI.initSetting('fb_depth', 3);
@@ -494,6 +497,9 @@ var UI;
                 UI.closeSettingsMenu();
             } else {
                 UI.updateSetting('encrypt');
+                
+                UI.updateSetting('locale');
+                
                 UI.updateSetting('true_color');
                 
                 UI.updateSetting('fb_depth');
@@ -553,6 +559,9 @@ var UI;
         settingsApply: function() {
             //Util.Debug(">> settingsApply");
             UI.saveSetting('encrypt');
+            
+            UI.saveSetting('locale');
+            
             UI.saveSetting('true_color');
             
             UI.saveSetting('fb_depth');
@@ -677,6 +686,9 @@ var UI;
 
             //Util.Debug(">> updateVisualState");
             $D('noVNC_encrypt').disabled = connected;
+            
+            $D('noVNC_locale').disabled = connected;
+            
             $D('noVNC_true_color').disabled = connected;
             
             $D('noVNC_fb_depth').disabled =  !$D("noVNC_true_color").checked
@@ -800,6 +812,9 @@ var UI;
             if (!UI.initRFB()) return;
 
             UI.rfb.set_encrypt(UI.getSetting('encrypt'));
+            
+            UI.rfb.set_locale(UI.getSetting('locale'));
+            
             UI.rfb.set_true_color(UI.getSetting('true_color'));
             
             UI.rfb.set_fb_depth(UI.getSetting('fb_depth'));

@@ -30,8 +30,10 @@ var kbdUtil = (function() {
     // Return true if a modifier which is not the specified char modifier (and is not shift) is down
     function hasShortcutModifier(charModifier, currentModifiers) {
         var mods = {};
+        var intKey;
         for (var key in currentModifiers) {
-            if (parseInt(key) !== XK_Shift_L) {
+            intKey = parseInt(key)
+            if (intKey !== XK_Shift_L || intKey !== XK_Shift_R) {
                 mods[key] = currentModifiers[key];
             }
         }
@@ -54,12 +56,15 @@ var kbdUtil = (function() {
     function hasCharModifier(charModifier, currentModifiers) {
         if (charModifier.length === 0) { return false; }
 
+//        for (var i = 0; i < charModifier.length; ++i) {
+//            if (!currentModifiers[charModifier[i]]) return false;
+//        }
+//        return true;
+        
         for (var i = 0; i < charModifier.length; ++i) {
-            if (!currentModifiers[charModifier[i]]) {
-                return false;
-            }
+            if (currentModifiers[charModifier[i]]) return true;
         }
-        return true;
+        return false;
     }
 
     // Helper object tracking modifier key state
@@ -72,7 +77,7 @@ var kbdUtil = (function() {
             }
             else if (isWindows()) {
                 // on Windows, Ctrl+Alt is used as a char modifier
-                charModifier = [XK_Alt_L, XK_Control_L];
+                charModifier = [XK_Alt_R, XK_Control_L];
             }
             else if (isLinux()) {
                 // on Linux, ISO Level 3 Shift (AltGr) is used as a char modifier
@@ -85,9 +90,12 @@ var kbdUtil = (function() {
 
         var state = {};
         state[XK_Control_L] = false;
+        state[XK_Control_R] = false;
         state[XK_Alt_L] = false;
+        state[XK_Alt_R] = false;
         state[XK_ISO_Level3_Shift] = false;
         state[XK_Shift_L] = false;
+        state[XK_Shift_R] = false;
         state[XK_Meta_L] = false;
 
         function sync(evt, keysym) {
@@ -96,26 +104,64 @@ var kbdUtil = (function() {
                 return {keysym: keysyms.lookup(keysym), type: state[keysym] ? 'keydown' : 'keyup'};
             }
 
-            if (evt.ctrlKey !== undefined &&
-                evt.ctrlKey !== state[XK_Control_L] && keysym !== XK_Control_L) {
-                state[XK_Control_L] = evt.ctrlKey;
-                result.push(syncKey(XK_Control_L));
+//            if (evt.ctrlKey !== undefined &&
+//                evt.ctrlKey !== state[XK_Control_L] && keysym !== XK_Control_L) {
+//                state[XK_Control_L] = evt.ctrlKey;
+//                result.push(syncKey(XK_Control_L));
+//            }
+            if( evt.ctrlKey !== undefined &&
+                    evt.ctrlKey !== ( state[ XK_Control_L ] || state[ XK_Control_L ] ) &&
+                    ( keysym !== XK_Control_L && keysym !== XK_Control_R ) ) {
+                if( evt.ctrlKey !== state[ XK_Control_L ] ) {
+                    state[ XK_Control_L ] = evt.ctrlKey;
+                    result.push( syncKey( XK_Control_L ) );
+                }
+                if( evt.ctrlKey !== state[ XK_Control_R ] ) {
+                    state[ XK_Control_R ] = evt.ctrlKey;
+                    result.push( syncKey( XK_Control_R ) );
+                }
             }
+//            if (evt.altKey !== undefined &&
+//                evt.altKey !== state[XK_Alt_L] && keysym !== XK_Alt_L) {
+//                state[XK_Alt_L] = evt.altKey;
+//                result.push(syncKey(XK_Alt_L));
+//            }
             if (evt.altKey !== undefined &&
-                evt.altKey !== state[XK_Alt_L] && keysym !== XK_Alt_L) {
-                state[XK_Alt_L] = evt.altKey;
-                result.push(syncKey(XK_Alt_L));
+                    evt.altKey !== ( state[ XK_Alt_L ] || state[ XK_Alt_R ] ) &&
+                    ( keysym !== XK_Alt_L && keysym !== XK_Alt_R ) ) {
+                if( evt.altKey !== state[ XK_Alt_L ] ) {
+                    state[ XK_Alt_L ] = evt.altKey;
+                    result.push( syncKey( XK_Alt_L ) );
+                }
+                if( evt.altKey !== state[ XK_Alt_R ] ) {
+                    state[ XK_Alt_R ] = evt.altKey;
+                    result.push( syncKey( XK_Alt_R ) );
+                }
             }
+            // Does this even exist???
             if (evt.altGraphKey !== undefined &&
                 evt.altGraphKey !== state[XK_ISO_Level3_Shift] && keysym !== XK_ISO_Level3_Shift) {
                 state[XK_ISO_Level3_Shift] = evt.altGraphKey;
                 result.push(syncKey(XK_ISO_Level3_Shift));
             }
+//            if (evt.shiftKey !== undefined &&
+//                evt.shiftKey !== state[XK_Shift_L] && keysym !== XK_Shift_L) {
+//                state[XK_Shift_L] = evt.shiftKey;
+//                result.push(syncKey(XK_Shift_L));
+//            }
             if (evt.shiftKey !== undefined &&
-                evt.shiftKey !== state[XK_Shift_L] && keysym !== XK_Shift_L) {
-                state[XK_Shift_L] = evt.shiftKey;
-                result.push(syncKey(XK_Shift_L));
+                    evt.shiftKey !== ( state[ XK_Shift_L ] || state[ XK_Shift_R ] ) &&
+                    ( keysym !== XK_Shift_L && keysym !== XK_Shift_R ) ) {
+                if( evt.shiftKey !== state[ XK_Shift_L ] ) {
+                    state[ XK_Shift_L ] = evt.shiftKey;
+                    result.push( syncKey( XK_Shift_L ) );
+                }
+                if( evt.shiftKey !== state[ XK_Shift_R ] ) {
+                    state[ XK_Shift_R ] = evt.shiftKey;
+                    result.push( syncKey( XK_Shift_R ) );
+                }
             }
+            
             if (evt.metaKey !== undefined &&
                 evt.metaKey !== state[XK_Meta_L] && keysym !== XK_Meta_L) {
                 state[XK_Meta_L] = evt.metaKey;
@@ -144,7 +190,8 @@ var kbdUtil = (function() {
             // is a shortcut modifier down?
             hasShortcutModifier: function() { return hasShortcutModifier(charModifier, state); },
             // if a char modifier is down, return the keys it consists of, otherwise return null
-            activeCharModifier: function() { return hasCharModifier(charModifier, state) ? charModifier : null; }
+            //activeCharModifier: function() { return hasCharModifier(charModifier, state) ? charModifier : null; }
+            activeCharModifier: function() { return hasCharModifier(charModifier, state) ? [ XK_Alt_R ] : null; }
         };
     }
 
@@ -187,17 +234,19 @@ var kbdUtil = (function() {
         // so we "just" need to map them to keysym, but AFAIK this is only available in IE10, which also provides evt.key
         // so we don't *need* it yet
         if (evt.keyCode) {
-            return keysyms.lookup(keysymFromKeyCode(evt.keyCode, evt.shiftKey));
+            return keysyms.lookup(
+                    keysymFromKeyCode( evt.keyCode, evt.shiftKey, evt.location ) );
         }
         if (evt.which) {
-            return keysyms.lookup(keysymFromKeyCode(evt.which, evt.shiftKey));
+            return keysyms.lookup( 
+                    keysymFromKeyCode( evt.which, evt.shiftKey, evt.location ) );
         }
         return null;
     }
 
     // Given a keycode, try to predict which keysym it might be.
     // If the keycode is unknown, null is returned.
-    function keysymFromKeyCode(keycode, shiftPressed) {
+    function keysymFromKeyCode(keycode, shiftPressed, location) {
         if (typeof(keycode) !== 'number') {
             return null;
         }
@@ -227,7 +276,7 @@ var kbdUtil = (function() {
             case 0xbe: return XK_period;
         }
 
-        return nonCharacterKey({keyCode: keycode});
+        return nonCharacterKey( { keyCode: keycode, location: location } );
     }
 
     // if the key is a known non-character key (any key which doesn't generate character data)
@@ -235,7 +284,8 @@ var kbdUtil = (function() {
     function nonCharacterKey(evt) {
         // evt.key not implemented yet
         if (!evt.keyCode) { return null; }
-        var keycode = evt.keyCode;
+        var keycode  = evt.keyCode, 
+            location = evt.location;
 
         if (keycode >= 0x70 && keycode <= 0x87) {
             return XK_F1 + keycode - 0x70; // F1-F24
@@ -261,9 +311,13 @@ var kbdUtil = (function() {
             case 39 : return XK_Right;
             case 40 : return XK_Down;
 
-            case 16 : return XK_Shift_L;
-            case 17 : return XK_Control_L;
-            case 18 : return XK_Alt_L; // also: Option-key on Mac
+//            case 16 : return XK_Shift_L;
+//            case 17 : return XK_Control_L;
+//            case 18 : return XK_Alt_L; // also: Option-key on Mac
+            
+            case 16 : return evt.location === 2 ? XK_Shift_R   : XK_Shift_L;
+            case 17 : return evt.location === 2 ? XK_Control_R : XK_Control_L;
+            case 18 : return evt.location === 2 ? XK_Alt_R     : XK_Alt_L; // also: Option-key on Mac
 
             case 224 : return XK_Meta_L;
             case 225 : return XK_ISO_Level3_Shift; // AltGr
@@ -324,7 +378,7 @@ function KeyEventDecoder(modifierState, next) {
         var suppress = !isShift && (type !== 'keydown' || modifierState.hasShortcutModifier() || !!kbdUtil.nonCharacterKey(evt));
 
         // If a char modifier is down on a keydown, we need to insert a stall,
-        // so VerifyCharModifier knows to wait and see if a keypress is comnig
+        // so VerifyCharModifier knows to wait and see if a keypress is coming
         var stall = type === 'keydown' && modifierState.activeCharModifier() && !kbdUtil.nonCharacterKey(evt);
 
         // if a char modifier is pressed, get the keys it consists of (on Windows, AltGr is equivalent to Ctrl+Alt)
@@ -335,7 +389,7 @@ function KeyEventDecoder(modifierState, next) {
         // and (b) we'll have to "escape" the modifier to undo the modifier when sending the char.
         if (active && keysym) {
             var isCharModifier = false;
-            for (var i  = 0; i < active.length; ++i) {
+            for (var i  = 0; i < active.length; ++i) { 
                 if (active[i] === keysym.keysym) {
                     isCharModifier = true;
                 }
@@ -347,7 +401,7 @@ function KeyEventDecoder(modifierState, next) {
 
         if (stall) {
             // insert a fake "stall" event
-            next({type: 'stall'});
+            next({type: 'stall'}); 
         }
         next(result);
 
@@ -356,7 +410,9 @@ function KeyEventDecoder(modifierState, next) {
 
     return {
         keydown: function(evt) {
-            sendAll(modifierState.keydown(evt));
+            console.log( "keydown: %O", evt );
+            //sendAll(modifierState.keydown(evt));
+            modifierState.keydown(evt)
             return process(evt, 'keydown');
         },
         keypress: function(evt) {
@@ -505,6 +561,7 @@ function TrackKeyState(next) {
             }
             break;
         case 'releaseall':
+            console.log( "Releasing all keys %O", state );
             /* jshint shadow: true */
             for (var i = 0; i < state.length; ++i) {
                 for (var key in state[i].keysyms) {
@@ -528,16 +585,16 @@ function EscapeModifiers(next) {
             return;
         }
         // undo modifiers
-        for (var i = 0; i < evt.escape.length; ++i) {
-            next({type: 'keyup', keyId: 0, keysym: keysyms.lookup(evt.escape[i])});
-        }
+//        for (var i = 0; i < evt.escape.length; ++i) {
+//            next({type: 'keyup', keyId: 0, keysym: keysyms.lookup(evt.escape[i])});
+//        }
         // send the character event
         next(evt);
         // redo modifiers
         /* jshint shadow: true */
-        for (var i = 0; i < evt.escape.length; ++i) {
-            next({type: 'keydown', keyId: 0, keysym: keysyms.lookup(evt.escape[i])});
-        }
+//        for (var i = 0; i < evt.escape.length; ++i) {
+//            next({type: 'keydown', keyId: 0, keysym: keysyms.lookup(evt.escape[i])});
+//        }
         /* jshint shadow: false */
     };
 }

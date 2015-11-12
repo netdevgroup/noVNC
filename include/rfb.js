@@ -54,7 +54,9 @@ var RFB;
             ['compress_hi',         -247 ],
             ['last_rect',           -224 ],
             ['xvp',                 -309 ],
-            ['ExtendedDesktopSize', -308 ]
+            ['ExtendedDesktopSize', -308 ],
+            
+            ['ExtendedKeyEvent',    -258 ]
         ];
 
         this._encHandlers = {};
@@ -122,10 +124,20 @@ var RFB;
             'target': 'null',                       // VNC display rendering Canvas object
             'focusContainer': document,             // DOM element that captures keyboard input
             'encrypt': false,                       // Use TLS/SSL/wss encryption
+            
+            'locale' : 'en_US',                     // POSIX Locale code of the format
+                                                    //   language[_territory]
+                                                    //   where a two-letter language code is from ISO 639 and
+                                                    //   a two-letter territory code is from ISO 3166
+            
             'true_color': true,                     // Request true color pixel data
             
             'fb_depth': 3,                          // Sets the color depth for true color mode.
-                                                    // Values can be 1, 2, and 3 byte(s).
+                                                    //   Values can be 1, 2, and 3 byte(s).
+            
+            'extended_key_event' : false,           // Support QEMU Extended Key Event psuedo-encoding.
+                                                    //   False unless we receive a FBU with a 
+                                                    //   QEMU encoded rectangle (set by server).
             
             'local_cursor': false,                  // Request locally rendered cursor
             'shared': true,                         // Request shared mode
@@ -591,7 +603,25 @@ var RFB;
 
         _handleKeyPress: function (keysym, down) {
             if (this._view_only) { return; } // View only, skip keyboard, events
-            this._sock.send(RFB.messages.keyEvent(keysym, down));
+            if( this._extended_key_event  && typeof XT !== 'undefined') {
+                // TODO: this should be more robust.
+                var keysymHexStr = '0x' + ( '0000' + keysym.toString(16) ).substr( -4, 4 );
+                var scancode = XT[ keysymHexStr ] !== 'undefined' ?
+                                        XT[ keysymHexStr ] :
+                                        0x0000;
+                console.log( "keysym = %s, scancode = %s, down = %s",keysymHexStr, scancode, down );
+                this._sock.send( RFB.messages.extendedKeyEvent( keysym, scancode, down ) );
+                
+                // TESTING: Make every key event send the follwing RFB key event sequence.
+////                this._sock.send( RFB.messages.extendedKeyEvent( 65507, 29, true ) );
+//                this._sock.send( RFB.messages.extendedKeyEvent( 65514, 184, true ) );
+//                this._sock.send( RFB.messages.extendedKeyEvent( 92, 41, true ) );
+//                this._sock.send( RFB.messages.extendedKeyEvent( 92, 41, false ) );
+//                this._sock.send( RFB.messages.extendedKeyEvent( 65514, 184, false ) );
+////                this._sock.send( RFB.messages.extendedKeyEvent( 65507, 29, true ) );
+            } else {
+                this._sock.send(RFB.messages.keyEvent(keysym, down));
+            }
         },
 
         _handleMouseButton: function (x, y, down, bmask) {
@@ -1254,9 +1284,16 @@ var RFB;
         ['target', 'wo', 'dom'],                // VNC display rendering Canvas object
         ['focusContainer', 'wo', 'dom'],        // DOM element that captures keyboard input
         ['encrypt', 'rw', 'bool'],              // Use TLS/SSL/wss encryption
+        
+        ['locale', 'rw', 'str'],                // POSIX Locale code of the format
+                                                //   language[_territory]
+                                                //   where a two-letter language code is from ISO 639 and
+                                                //   a two-letter territory code is from ISO 3166
+        
         ['true_color', 'rw', 'bool'],           // Request true color pixel data
         
         ['fb_depth', 'rw', 'int'],              // Request true color pixel data
+        ['extended_key_event', 'rw', 'bool'],   // Support QEMU Extended Key Event psuedo-encoding.
         
         ['local_cursor', 'rw', 'bool'],         // Request locally rendered cursor
         ['shared', 'rw', 'bool'],               // Request shared mode
@@ -1299,10 +1336,20 @@ var RFB;
     // Class Methods
     RFB.messages = {
         keyEvent: function (keysym, down) {
+            console.log( 'keysym: 0x%s, %s', keysym.toString( 16 ), down ? 'down' : 'up' );
             var arr = [4];
             arr.push8(down);
             arr.push16(0);
             arr.push32(keysym);
+            return arr;
+        },
+        
+        extendedKeyEvent: function ( keysym, scancode, down ) {
+            var arr = [ 255 ];      // QEMU message type
+            arr.push8( 0 );         // QEMU Extended Key Event submessage type 
+            arr.push16( down );     // down flag
+            arr.push32( keysym );   // XKeysymdef.h keysym
+            arr.push32( scancode ); // XT Scan Code Set 1
             return arr;
         },
 
@@ -1530,7 +1577,7 @@ var RFB;
         },
 
         HEXTILE: function () {
-            console.log( "Processing HEXTILE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+//            console.log( "Processing HEXTILE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
             
             var rQ = this._sock.get_rQ();
             var rQi = this._sock.get_rQi();
@@ -2053,6 +2100,19 @@ var RFB;
             }
 
             this._encHandlers.handle_FB_resize();
+            return true;
+        },
+        
+        ExtendedKeyEvent: function () {
+            // Util.Info( "Server confirms support for QEMU Extend Key Event Messages." );
+            console.log( "Server confirms support for QEMU Extend Key Event Messages." );
+            console.log( "  loading scancodes for locale %s", this._locale );
+            Util.load_scripts(['keymaps/' + this._locale + '.js']);
+            this._extended_key_event = true;
+            
+            this._FBU.bytes = 0;
+            this._FBU.rects--;
+            
             return true;
         },
 
