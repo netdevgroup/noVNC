@@ -618,7 +618,7 @@ var RFB;
 //                this._sock.send( RFB.messages.extendedKeyEvent( 92, 41, true ) );
 //                this._sock.send( RFB.messages.extendedKeyEvent( 92, 41, false ) );
 //                this._sock.send( RFB.messages.extendedKeyEvent( 65514, 184, false ) );
-////                this._sock.send( RFB.messages.extendedKeyEvent( 65507, 29, true ) );
+////                this._sock.send( RFB.messages.extendedKeyEvent( 65507, 29, false ) );
             } else {
                 this._sock.send(RFB.messages.keyEvent(keysym, down));
             }

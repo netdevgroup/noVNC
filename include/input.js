@@ -51,6 +51,12 @@ var Keyboard, Mouse;
             if (this._onKeyPress) {
                 Util.Debug("onKeyPress " + (e.type == 'keydown' ? "down" : "up") +
                            ", keysym: " + e.keysym.keysym + "(" + e.keysym.keyname + ")");
+                
+                if(e.keysym.keysym == 0xffea  && e.type === 'keydown') {
+                   console.log("Got right ALT - releasing left CTRL.");
+                   this._onKeyPress(0xffe3, false);
+                }
+                
                 this._onKeyPress(e.keysym.keysym, e.type == 'keydown');
             }
         },

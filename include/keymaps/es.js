@@ -130,7 +130,7 @@ XT = {
     '0x08fe' : 0x0016, // XK_downarrow
     '0x0ad2' : 0x002f, // XK_leftdoublequotemark
     '0x0ad3' : 0x0030, // XK_rightdoublequotemark
-    '0x20ac' : 0x0012, // XK_EuroSign
+    '0x20ac' : VMWARE ? 0x0012 : 0x0006, // XK_EuroSign
     '0xfe03' : 0x0138, // XK_ISO_Level3_Shift
     '0xfe20' : 0x000f, // XK_ISO_Left_Tab
     '0xfe50' : 0x000d, // XK_dead_grave

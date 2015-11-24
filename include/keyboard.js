@@ -56,15 +56,10 @@ var kbdUtil = (function() {
     function hasCharModifier(charModifier, currentModifiers) {
         if (charModifier.length === 0) { return false; }
 
-//        for (var i = 0; i < charModifier.length; ++i) {
-//            if (!currentModifiers[charModifier[i]]) return false;
-//        }
-//        return true;
-        
         for (var i = 0; i < charModifier.length; ++i) {
-            if (currentModifiers[charModifier[i]]) return true;
+            if (!currentModifiers[charModifier[i]]) return false;
         }
-        return false;
+        return true;
     }
 
     // Helper object tracking modifier key state
@@ -77,7 +72,8 @@ var kbdUtil = (function() {
             }
             else if (isWindows()) {
                 // on Windows, Ctrl+Alt is used as a char modifier
-                charModifier = [XK_Alt_R, XK_Control_L];
+                //charModifier = [XK_Alt_R, XK_Control_L];
+              charModifier = [XK_Alt_R];
             }
             else if (isLinux()) {
                 // on Linux, ISO Level 3 Shift (AltGr) is used as a char modifier
@@ -110,8 +106,9 @@ var kbdUtil = (function() {
 //                result.push(syncKey(XK_Control_L));
 //            }
             if( evt.ctrlKey !== undefined &&
-                    evt.ctrlKey !== ( state[ XK_Control_L ] || state[ XK_Control_L ] ) &&
-                    ( keysym !== XK_Control_L && keysym !== XK_Control_R ) ) {
+                    evt.ctrlKey !== ( state[ XK_Control_L ] || state[ XK_Control_R ] ) &&
+                    ( keysym !== XK_Control_L && keysym !== XK_Control_R ) &&
+                    !evt.altKey) {
                 if( evt.ctrlKey !== state[ XK_Control_L ] ) {
                     state[ XK_Control_L ] = evt.ctrlKey;
                     result.push( syncKey( XK_Control_L ) );
@@ -161,7 +158,6 @@ var kbdUtil = (function() {
                     result.push( syncKey( XK_Shift_R ) );
                 }
             }
-            
             if (evt.metaKey !== undefined &&
                 evt.metaKey !== state[XK_Meta_L] && keysym !== XK_Meta_L) {
                 state[XK_Meta_L] = evt.metaKey;
@@ -172,12 +168,19 @@ var kbdUtil = (function() {
         function syncKeyEvent(evt, down) {
             var obj = getKeysym(evt);
             var keysym = obj ? obj.keysym : null;
-
             // first, apply the event itself, if relevant
             if (keysym !== null && state[keysym] !== undefined) {
                 state[keysym] = down;
             }
-            return sync(evt, keysym);
+            var result = sync(evt, keysym);
+            if (keysym === XK_Alt_R && down /* && lang !== 'es' */) {
+                // send a key up XK_Control_L and sync before 
+                // sending key down XK_Alt_R.
+                console.log("releasing left conrol key");
+                state[XK_Control_L] = false;
+                result.shift( {keysym: XK_Control_L, type: 'keyup'} );
+            }
+            return result;
         }
 
         return {
@@ -197,7 +200,7 @@ var kbdUtil = (function() {
 
     // Get a key ID from a keyboard event
     // May be a string or an integer depending on the available properties
-    function getKey(evt){
+    function getKey(evt) {
         if ('keyCode' in evt && 'key' in evt) {
             return evt.key + ':' + evt.keyCode;
         }
@@ -211,7 +214,7 @@ var kbdUtil = (function() {
 
     // Get the most reliable keysym value we can get from a key event
     // if char/charCode is available, prefer those, otherwise fall back to key/keyCode/which
-    function getKeysym(evt){
+    function getKeysym(evt) {
         var codepoint;
         if (evt.char && evt.char.length === 1) {
             codepoint = evt.char.charCodeAt();
@@ -292,10 +295,10 @@ var kbdUtil = (function() {
         }
         switch (keycode) {
 
-            case 8 : return XK_BackSpace;
+            case 8 :  return XK_BackSpace;
             case 13 : return XK_Return;
 
-            case 9 : return XK_Tab;
+            case 9 :  return XK_Tab;
 
             case 27 : return XK_Escape;
             case 46 : return XK_Delete;
@@ -389,7 +392,7 @@ function KeyEventDecoder(modifierState, next) {
         // and (b) we'll have to "escape" the modifier to undo the modifier when sending the char.
         if (active && keysym) {
             var isCharModifier = false;
-            for (var i  = 0; i < active.length; ++i) { 
+            for (var i = 0; i < active.length; ++i) {
                 if (active[i] === keysym.keysym) {
                     isCharModifier = true;
                 }
@@ -411,8 +414,8 @@ function KeyEventDecoder(modifierState, next) {
     return {
         keydown: function(evt) {
             console.log( "keydown: %O", evt );
-            //sendAll(modifierState.keydown(evt));
-            modifierState.keydown(evt)
+            sendAll(modifierState.keydown(evt));
+            //modifierState.keydown(evt); 
             return process(evt, 'keydown');
         },
         keypress: function(evt) {
