@@ -23,7 +23,8 @@ var Keyboard, Mouse;
 
         Util.set_defaults(this, defaults, {
             'target': document,
-            'focused': true
+            'focused': true,
+            'locale': 'us'
         });
 
         // create the keyboard handler
@@ -52,9 +53,12 @@ var Keyboard, Mouse;
                 Util.Debug("onKeyPress " + (e.type == 'keydown' ? "down" : "up") +
                            ", keysym: " + e.keysym.keysym + "(" + e.keysym.keyname + ")");
                 
-                if(e.keysym.keysym == 0xffea  && e.type === 'keydown') {
-                   console.log("Got right ALT - releasing left CTRL.");
-                   this._onKeyPress(0xffe3, false);
+                // If we have a foreign keyboard and the right Alt key is down, 
+                // release the Ctrl keys to simulate a proper AltGr key press.
+                if(e.keysym.keysym == 0xffea  && e.type === 'keydown' && this._locale != 'us') {
+                    console.log("Got right ALT - releasing Ctrl keys.");
+                    this._onKeyPress(0xffe4, false);
+                    this._onKeyPress(0xffe3, false);
                 }
                 
                 this._onKeyPress(e.keysym.keysym, e.type == 'keydown');
@@ -148,6 +152,7 @@ var Keyboard, Mouse;
     Util.make_properties(Keyboard, [
         ['target',     'wo', 'dom'],  // DOM element that captures keyboard input
         ['focused',    'rw', 'bool'], // Capture and send key events
+        ['locale',     'rw', 'str'],  // ISO 639-1 language code.
 
         ['onKeyPress', 'rw', 'func'] // Handler for key press/release
     ]);

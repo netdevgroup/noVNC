@@ -173,12 +173,14 @@ var kbdUtil = (function() {
                 state[keysym] = down;
             }
             var result = sync(evt, keysym);
-            if (keysym === XK_Alt_R && down /* && lang !== 'es' */) {
+            if (keysym === XK_Alt_R && down /* && lang !== 'us' */) {
                 // send a key up XK_Control_L and sync before 
                 // sending key down XK_Alt_R.
                 console.log("releasing left conrol key");
                 state[XK_Control_L] = false;
                 result.shift( {keysym: XK_Control_L, type: 'keyup'} );
+                state[XK_Control_R] = false;
+                result.shift( {keysym: XK_Control_R, type: 'keyup'} );
             }
             return result;
         }

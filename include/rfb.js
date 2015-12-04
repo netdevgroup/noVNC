@@ -125,10 +125,14 @@ var RFB;
             'focusContainer': document,             // DOM element that captures keyboard input
             'encrypt': false,                       // Use TLS/SSL/wss encryption
             
-            'locale' : 'en_US',                     // POSIX Locale code of the format
-                                                    //   language[_territory]
-                                                    //   where a two-letter language code is from ISO 639 and
-                                                    //   a two-letter territory code is from ISO 3166
+            // rjones 2015-12-01
+            // This used to be a POSIX Locale code of the format
+            //   language[_territory]
+            //   where a two-letter language code is from ISO 639-1 and
+            //   a two-letter territory code is from ISO 3166
+            // But it's been simplified to only represent language due to 
+            // a lack of key maps.  It may be expanded in the future.
+            'locale' : 'us',                        // A two-letter ISO 639-1 language code.
             
             'true_color': true,                     // Request true color pixel data
             
@@ -1285,10 +1289,7 @@ var RFB;
         ['focusContainer', 'wo', 'dom'],        // DOM element that captures keyboard input
         ['encrypt', 'rw', 'bool'],              // Use TLS/SSL/wss encryption
         
-        ['locale', 'rw', 'str'],                // POSIX Locale code of the format
-                                                //   language[_territory]
-                                                //   where a two-letter language code is from ISO 639 and
-                                                //   a two-letter territory code is from ISO 3166
+        ['locale', 'rw', 'str'],                // A two-letter ISO 639-1 language code.
         
         ['true_color', 'rw', 'bool'],           // Request true color pixel data
         
@@ -2109,6 +2110,7 @@ var RFB;
             console.log( "  loading scancodes for locale %s", this._locale );
             Util.load_scripts(['keymaps/' + this._locale + '.js']);
             this._extended_key_event = true;
+            this._keyboard.set_locale(this._locale);
             
             this._FBU.bytes = 0;
             this._FBU.rects--;
