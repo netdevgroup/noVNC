@@ -55,7 +55,7 @@ var Keyboard, Mouse;
                 
                 // If we have a foreign keyboard and the right Alt key is down, 
                 // release the Ctrl keys to simulate a proper AltGr key press.
-                if(e.keysym.keysym == 0xffea  && e.type === 'keydown' && this._locale != 'us') {
+                if(e.keysym.keysym == 0xffea  && e.type === 'keydown' && this._locale !== 'us') {
                     console.log("Got right ALT - releasing Ctrl keys.");
                     this._onKeyPress(0xffe4, false);
                     this._onKeyPress(0xffe3, false);

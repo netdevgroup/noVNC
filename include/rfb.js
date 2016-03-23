@@ -38,8 +38,9 @@ var RFB;
         // In preference order
         this._encodings = [
             ['COPYRECT',            0x01 ],
-//            ['TIGHT',               0x07 ],
-//            ['TIGHT_PNG',           -260 ],
+            ['TIGHT_PNG',           -260 ],
+            //['TIGHT',               0x07 ],
+            //['TIGHT_PNG',           -260 ],
             ['HEXTILE',             0x05 ],
             ['RRE',                 0x02 ],
             ['RAW',                 0x00 ],
@@ -2107,11 +2108,14 @@ var RFB;
         ExtendedKeyEvent: function () {
             // Util.Info( "Server confirms support for QEMU Extend Key Event Messages." );
             console.log( "Server confirms support for QEMU Extend Key Event Messages." );
-            console.log( "  loading scancodes for locale %s", this._locale );
-            Util.load_scripts(['keymaps/' + this._locale + '.js']);
-            this._extended_key_event = true;
-            this._keyboard.set_locale(this._locale);
-            
+            if( this._locale !== 'us' ) {
+                console.log( "  loading scancodes for locale %s", this._locale );
+                Util.load_scripts(['keymaps/' + this._locale + '.js']);
+                this._extended_key_event = true;
+                this._keyboard.set_locale(this._locale);
+            } else {
+                console.log( "  locale is %s, ignoring Extended Key Event support", this._locale );
+            }
             this._FBU.bytes = 0;
             this._FBU.rects--;
             

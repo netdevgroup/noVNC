@@ -107,8 +107,7 @@ var kbdUtil = (function() {
 //            }
             if( evt.ctrlKey !== undefined &&
                     evt.ctrlKey !== ( state[ XK_Control_L ] || state[ XK_Control_R ] ) &&
-                    ( keysym !== XK_Control_L && keysym !== XK_Control_R ) &&
-                    !evt.altKey) {
+                    ( keysym !== XK_Control_L && keysym !== XK_Control_R ) ) {
                 if( evt.ctrlKey !== state[ XK_Control_L ] ) {
                     state[ XK_Control_L ] = evt.ctrlKey;
                     result.push( syncKey( XK_Control_L ) );
@@ -173,7 +172,7 @@ var kbdUtil = (function() {
                 state[keysym] = down;
             }
             var result = sync(evt, keysym);
-            if (keysym === XK_Alt_R && down /* && lang !== 'us' */) {
+            if (keysym === XK_Alt_R && down && typeof XT !== 'undefined') {
                 // send a key up XK_Control_L and sync before 
                 // sending key down XK_Alt_R.
                 console.log("releasing left conrol key");
@@ -417,7 +416,6 @@ function KeyEventDecoder(modifierState, next) {
         keydown: function(evt) {
             console.log( "keydown: %O", evt );
             sendAll(modifierState.keydown(evt));
-            //modifierState.keydown(evt); 
             return process(evt, 'keydown');
         },
         keypress: function(evt) {
