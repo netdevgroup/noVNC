@@ -65,6 +65,10 @@ function Websock() {
         'close': function () {},
         'error': function () {}
     };
+    
+    //rjones 2016.03.24 - add properties for tracking bandwidth stats
+    this._totalTx = 0;
+    this._totalRx = 0;
 }
 
 (function () {
@@ -321,23 +325,31 @@ function Websock() {
 
         // private methods
         _encode_message: function () {
+            var enc_msg;
             if (this._mode === 'binary') {
                 // Put in a binary arraybuffer
-                return (new Uint8Array(this._sQ)).buffer;
+                enc_msg = (new Uint8Array(this._sQ)).buffer;
+                this._totalTx += enc_msg.byteLength;
+                //return (new Uint8Array(this._sQ)).buffer;
             } else {
                 // base64 encode
-                return Base64.encode(this._sQ);
+                enc_msg = Base64.encode(this._sQ);
+                this._totalTx += enc_msg.length;
+                //return Base64.encode(this._sQ);
             }
+            return enc_msg;
         },
 
         _decode_message: function (data) {
             if (this._mode === 'binary') {
+                this._totalRx += data.byteLength;
                 // push arraybuffer values onto the end
                 var u8 = new Uint8Array(data);
                 for (var i = 0; i < u8.length; i++) {
                     this._rQ.push(u8[i]);
                 }
             } else {
+                this._totalRx += data.length;
                 // base64 decode and concat to end
                 this._rQ = this._rQ.concat(Base64.decode(data, 0));
             }

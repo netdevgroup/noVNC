@@ -35,12 +35,14 @@ var RFB;
         this._rfb_tightvnc = false;
         this._rfb_xvp_ver = 0;
 
+        this._stop_FBUs = false;
+        this._stop_FBUs_timer = null;
+        
         // In preference order
         this._encodings = [
             ['COPYRECT',            0x01 ],
             ['TIGHT_PNG',           -260 ],
-            //['TIGHT',               0x07 ],
-            //['TIGHT_PNG',           -260 ],
+            ['TIGHT',               0x07 ],
             ['HEXTILE',             0x05 ],
             ['RRE',                 0x02 ],
             ['RAW',                 0x00 ],
@@ -59,6 +61,24 @@ var RFB;
             
             ['ExtendedKeyEvent',    -258 ]
         ];
+        
+//        this._encodings = [
+//           ['RAW',                 0x00 ],
+//           ['DesktopSize',         -223 ],
+//           ['Cursor',              -239 ],
+//
+//           // Psuedo-encoding settings
+//           //['JPEG_quality_lo',    -32 ],
+//           //['JPEG_quality_med',     -26 ],
+//           //['JPEG_quality_hi',    -23 ],
+//           //['compress_lo',       -255 ],
+//           ['compress_hi',         -247 ],
+//           ['last_rect',           -224 ],
+//           ['xvp',                 -309 ],
+//           ['ExtendedDesktopSize', -308 ],
+//           
+//           ['ExtendedKeyEvent',    -258 ]
+//       ];
 
         this._encHandlers = {};
         this._encNames = {};
@@ -134,6 +154,9 @@ var RFB;
             // But it's been simplified to only represent language due to 
             // a lack of key maps.  It may be expanded in the future.
             'locale' : 'us',                        // A two-letter ISO 639-1 language code.
+            
+            'preferred': 'TIGHT_PNG',      // The preferred encoding for frame buffer 
+                                                    // updates (This is suggested to the server).
             
             'true_color': true,                     // Request true color pixel data
             
@@ -1048,6 +1071,29 @@ var RFB;
             this._mouse.grab();
 
             var response = RFB.messages.pixelFormat(this._fb_Bpp, this._fb_depth, big_endian, this._true_color);
+            
+//            console.log( 'Setting preferred encoding to %s', this._preferred );
+//            switch( this._preferred ) {
+//                case 'TIGHT_PNG':
+//                    this._encodings.unshift( ['TIGHT_PNG', -260 ] );
+//                    this._encodings.push( ['JPEG_quality_med', -26 ] );
+//                    break;
+//                case 'TIGHT':
+//                    this._encodings.unshift( ['TIGHT', 0x07 ] );
+//                    this._encodings.push( ['JPEG_quality_med', -26 ] );
+//                    break;
+//                case 'HEXTILE':
+//                    this._encodings.unshift( ['HEXTILE', 0x05 ] );
+//                    break;
+//                case 'RRE':
+//                    this._encodings.unshift( ['RRE', 0x02 ] );
+//                    break;
+//                default:
+//                    break;
+//            }
+//            this._encodings.unshift( ['COPYRECT', 0x01 ] );
+//            console.log( 'Encodings: %O', this._encodings );
+            
             response = response.concat(
                             RFB.messages.clientEncodings(this._encodings, this._local_cursor, this._fb_depth));
             response = response.concat(
@@ -1162,6 +1208,19 @@ var RFB;
             switch (msg_type) {
                 case 0:  // FramebufferUpdate
                     var ret = this._framebufferUpdate();
+                    // rjones 2016.03.24 - stop framebuffer updates when 
+                    // the following timer expires.
+                    if( !this._stop_FBUs_timer ) {
+                        this._stop_FBUs_timer = setTimeout( 
+                                function( ) {
+                                    this._stop_FBUs = true;
+                                    console.error( '%d', this._sock._totalRx );
+                                }.bind( this ), 250 );
+                    }
+                    if( this._stop_FBUs ) {
+                        console.log( 'Halting requests for FBUs.' );
+                        ret = false;
+                    }
                     if (ret) {
                         this._sock.send(RFB.messages.fbUpdateRequests(this._display.getCleanDirtyReset(),
                                                                       this._fb_width, this._fb_height));
@@ -1291,6 +1350,8 @@ var RFB;
         ['encrypt', 'rw', 'bool'],              // Use TLS/SSL/wss encryption
         
         ['locale', 'rw', 'str'],                // A two-letter ISO 639-1 language code.
+        
+        ['preferred', 'rw', 'str'],
         
         ['true_color', 'rw', 'bool'],           // Request true color pixel data
         
@@ -1474,6 +1535,7 @@ var RFB;
         },
 
         fbUpdateRequest: function (incremental, x, y, w, h) {
+            console.log( 'Requesting FBU');
             if (typeof(x) === "undefined") { x = 0; }
             if (typeof(y) === "undefined") { y = 0; }
 
@@ -1502,7 +1564,7 @@ var RFB;
 
     RFB.encodingHandlers = {
         RAW: function () {
-            //console.log( "Processing RAW encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            console.log( "Processing RAW encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
             if (this._FBU.lines === 0) {
                 this._FBU.lines = this._FBU.height;
             }
@@ -1529,6 +1591,8 @@ var RFB;
         },
 
         COPYRECT: function () {
+            console.log( "Processing COPYRECT encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            
             this._FBU.bytes = 4;
             if (this._sock.rQwait("COPYRECT", 4)) { return false; }
             this._display.renderQ_push({
@@ -1546,7 +1610,7 @@ var RFB;
         },
 
         RRE: function () {
-            //console.log( "Processing RRE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            console.log( "Processing RRE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
             
             var color;
             if (this._FBU.subrects === 0) {
@@ -1579,7 +1643,7 @@ var RFB;
         },
 
         HEXTILE: function () {
-//            console.log( "Processing HEXTILE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
+            console.log( "Processing HEXTILE encoded rectangle @ %d-bit %s color.", this._fb_depth * 8, (this._big_endian ? "be" : "le") );
             
             var rQ = this._sock.get_rQ();
             var rQi = this._sock.get_rQi();
