@@ -39,7 +39,7 @@ var RFB;
         this._encodings = [
             ['COPYRECT',            0x01 ],
             ['TIGHT_PNG',           -260 ],
-            //['TIGHT',               0x07 ],
+            ['TIGHT',               0x07 ],
             //['TIGHT_PNG',           -260 ],
             ['HEXTILE',             0x05 ],
             ['RRE',                 0x02 ],
