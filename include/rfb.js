@@ -358,6 +358,9 @@ var RFB;
 
                 this._sock.send(arr);
             }
+            else {
+                console.warn( 'Extended desktop size pseudo encoding is not supported by the server!' );
+            }
         },
 
 
