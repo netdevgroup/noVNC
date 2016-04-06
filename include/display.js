@@ -313,7 +313,8 @@ var Display;
 
             this.viewportChangeSize();
         },
-
+        
+        /*
         clear: function () {
             if (this._logo) {
                 this.resize(this._logo.width, this._logo.height);
@@ -329,6 +330,12 @@ var Display;
                 this._drawCtx.clearRect(0, 0, this._viewportLoc.w, this._viewportLoc.h);
             }
 
+            this._renderQ = [];
+        },*/
+        
+        // Simplified clear
+        clear: function ( ) {
+            this._drawCtx.clearRect(0, 0, this._viewportLoc.w, this._viewportLoc.h);
             this._renderQ = [];
         },
 
