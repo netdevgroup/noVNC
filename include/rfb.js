@@ -53,7 +53,7 @@ var RFB;
 //            ['VMwareTypematicInfo',  103 + 0x574d5600],
 //            ['VMwareLEDState',       104 + 0x574d5600],
 //            ['VMwareServerPush2',    123 + 0x574d5600],
-            ['VMwareServerCpas',     122 + 0x574d5600],
+            ['VMwareServerCaps',     122 + 0x574d5600],
 
             // Psuedo-encoding settings
             //['JPEG_quality_lo',    -32 ],
@@ -1168,36 +1168,6 @@ var RFB;
 
             return true;
         },
-        
-        _handle_vmware_server_message: function ( ) {
-            Util.Debug("VMwareServerMessage");
-            if (this._sock.rQwait("VMwareServerMessage header", 7, 1)) { return false; }
-            
-            var id = self._readByte(),
-                len = self._readInt16(),
-                caps = self._readInt32(),
-                vmw = this._vmware;
-            
-            if (id != 0 || len < 8) {
-               this._fail( 'Unknown VMware server submessage ' + id );
-            }
-            
-            vmw.supportsKeyEvent          = !!( caps & 0x02 );
-            vmw.supportsUpdateAck         = !!( caps & 0x20 );
-            vmw.supportsRequestResolution = !!( caps & 0x80 );
-            
-            if( vmw.supportsRequestResolution ) {
-                console.log( 'Server supports the VMWRequestResolution pseudo encoding' );
-            }
-
-            // If we have already been asked to send a resolution request
-            // to the server, this is the point at which it becomes legal
-            // to do so.
-            
-            if (len > 8) this._sock.rQskipBytes( len - 8 );
-            
-            return true;
-        },
 
         _handle_xvp_msg: function () {
             if (this._sock.rQwait("XVP version and message", 3, 1)) { return false; }
@@ -2227,6 +2197,36 @@ var RFB;
             this._FBU.rects--;
 
             Util.Debug("<< set_cursor");
+            return true;
+        },
+        
+        VMwareServerCaps: function ( ) {
+            Util.Debug("VMwareServerMessage");
+            if (this._sock.rQwait("VMwareServerMessage header", 7, 1)) { return false; }
+            
+            var id = self._readByte(),
+                len = self._readInt16(),
+                caps = self._readInt32(),
+                vmw = this._vmware;
+            
+            if (id != 0 || len < 8) {
+               this._fail( 'Unknown VMware server submessage ' + id );
+            }
+            
+            vmw.supportsKeyEvent          = !!( caps & 0x02 );
+            vmw.supportsUpdateAck         = !!( caps & 0x20 );
+            vmw.supportsRequestResolution = !!( caps & 0x80 );
+            
+            if( vmw.supportsRequestResolution ) {
+                console.log( 'Server supports the VMWRequestResolution pseudo encoding' );
+            }
+
+            // If we have already been asked to send a resolution request
+            // to the server, this is the point at which it becomes legal
+            // to do so.
+            
+            if (len > 8) this._sock.rQskipBytes( len - 8 );
+            
             return true;
         },
 
