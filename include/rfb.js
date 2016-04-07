@@ -1194,6 +1194,7 @@ var RFB;
         
         _handle_vmware_server_message: function ( ) {
             Util.Debug("VMwareServerMessage");
+            console.warn( '*** Received VMWareServerMessage!!!');
             if (this._sock.rQwait("VMwareServerMessage header", 7, 1)) { return false; }
             
             var id = self._readByte(),
@@ -2228,10 +2229,6 @@ var RFB;
 
             Util.Debug("<< set_cursor");
             return true;
-        },
-        
-        VMwareServerCaps: function ( ) {
-            
         },
 
         JPEG_quality_lo: function () {
