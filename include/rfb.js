@@ -362,7 +362,15 @@ var RFB;
                 console.warn( 'Extended desktop size pseudo encoding is not supported by the server!' );
             }
         },
-
+        
+        setVmWareDesktopSize: function ( width, height ) {
+            var arr = [127];      // VMware client message type
+            arr.push8( 5 );       // Resolution request 2 message sub-type
+            arr.push16( 8 );      // Length
+            arr.push16( width );
+            arr.push16( height );
+            this._sock.send( arr );
+        },
 
         // Private methods
 
