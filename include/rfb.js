@@ -38,14 +38,22 @@ var RFB;
         // In preference order
         this._encodings = [
             ['COPYRECT',            0x01 ],
-            ['TIGHT_PNG',           -260 ],
             ['TIGHT',               0x07 ],
-            //['TIGHT_PNG',           -260 ],
+            ['TIGHT_PNG',           -260 ],
             ['HEXTILE',             0x05 ],
             ['RRE',                 0x02 ],
             ['RAW',                 0x00 ],
             ['DesktopSize',         -223 ],
             ['Cursor',              -239 ],
+            
+            // VMware 
+//            ['VMwareDefineCursor',   100 + 0x574d5600],
+//            ['VMwareCursorState',    101 + 0x574d5600],
+//            ['VMwareCursorPosition', 102 + 0x574d5600],
+//            ['VMwareTypematicInfo',  103 + 0x574d5600],
+//            ['VMwareLEDState',       104 + 0x574d5600],
+//            ['VMwareServerPush2',    123 + 0x574d5600],
+            ['VMwareServerCpas',     122 + 0x574d5600],
 
             // Psuedo-encoding settings
             //['JPEG_quality_lo',    -32 ],
@@ -57,7 +65,7 @@ var RFB;
             ['xvp',                 -309 ],
             ['ExtendedDesktopSize', -308 ],
             
-            ['ExtendedKeyEvent',    -258 ]
+            ['ExtendedKeyEvent',    -258 ],
         ];
 
         this._encHandlers = {};
@@ -113,6 +121,14 @@ var RFB;
         this._supportsSetDesktopSize = false;
         this._screen_id = 0;
         this._screen_flags = 0;
+        
+        // rjones 2016.04.07
+        // attempting to add VMware proprietary VNC support
+        this._vmware = {
+            supportsKeyEvent          : false,
+            supportsUpdateAck         : false,
+            supportsRequestResolution : false
+        };
 
         // Mouse state
         this._mouse_buttonMask = 0;
@@ -334,36 +350,50 @@ var RFB;
             if (this._rfb_state !== 'normal') { return; }
             this._sock.send(RFB.messages.clientCutText(text));
         },
-
-        setDesktopSize: function (width, height) {
-            if (this._rfb_state !== "normal") { return; }
-
-            if (this._supportsSetDesktopSize) {
-
-                var arr = [251];    // msg-type
-                arr.push8(0);       // padding
-                arr.push16(width);  // width
-                arr.push16(height); // height
-
-                arr.push8(1);       // number-of-screens
-                arr.push8(0);       // padding
-
-                // screen array
-                arr.push32(this._screen_id);    // id
-                arr.push16(0);                  // x-position
-                arr.push16(0);                  // y-position
-                arr.push16(width);              // width
-                arr.push16(height);             // height
-                arr.push32(this._screen_flags); // flags
-
-                this._sock.send(arr);
+        
+        setRemoteResolution: function ( width, height ) {
+            if (this._rfb_state !== "normal") { return false; }
+            
+            var supported = false;
+            
+            if( this._supportsSetDesktopSize ) {
+                this._setDesktopSize( width, height );
+                supported = true;
+            }
+            else if( this._vmware.supportsRequestResolution ) {
+                this._vmwareRequestResolution( width, height );
+                supported = true;
             }
             else {
-                console.warn( 'Extended desktop size pseudo encoding is not supported by the server!' );
+                console.warn( 
+                        'The server does not support resizing of the ' +
+                        'remote\'s resolution.' );
             }
+            
+            return supported;
+        },
+
+        _setDesktopSize: function (width, height) {
+            var arr = [251];    // msg-type
+            arr.push8(0);       // padding
+            arr.push16(width);  // width
+            arr.push16(height); // height
+
+            arr.push8(1);       // number-of-screens
+            arr.push8(0);       // padding
+
+            // screen array
+            arr.push32(this._screen_id);    // id
+            arr.push16(0);                  // x-position
+            arr.push16(0);                  // y-position
+            arr.push16(width);              // width
+            arr.push16(height);             // height
+            arr.push32(this._screen_flags); // flags
+
+            this._sock.send(arr);
         },
         
-        setVmWareDesktopSize: function ( width, height ) {
+        _setVmWareDesktopSize: function ( width, height ) {
             var arr = [127];      // VMware client message type
             arr.push8( 5 );       // Resolution request 2 message sub-type
             arr.push16( 8 );      // Length
@@ -1113,10 +1143,11 @@ var RFB;
             
             // rjones - Looks like little endian is assumed here.
             //          Even so, right-shifts are faster.
-            for (var c = 0; c < num_colours; c++) {
-                var red = parseInt(this._sock.rQshift16() / 256, 10);
-                var green = parseInt(this._sock.rQshift16() / 256, 10);
-                var blue = parseInt(this._sock.rQshift16() / 256, 10);
+            var c, red, green, bule;
+            for (c = 0; c < num_colours; c++) {
+                red = parseInt(this._sock.rQshift16() / 256, 10);
+                green = parseInt(this._sock.rQshift16() / 256, 10);
+                blue = parseInt(this._sock.rQshift16() / 256, 10);
                 this._display.set_colourMap([blue, green, red], first_colour + c);
             }
             Util.Debug("colourMap: " + this._display.get_colourMap());
@@ -1135,6 +1166,36 @@ var RFB;
             var text = this._sock.rQshiftStr(length);
             this._onClipboard(this, text);
 
+            return true;
+        },
+        
+        _handle_vmware_server_message: function ( ) {
+            Util.Debug("VMwareServerMessage");
+            if (this._sock.rQwait("VMwareServerMessage header", 7, 1)) { return false; }
+            
+            var id = self._readByte(),
+                len = self._readInt16(),
+                caps = self._readInt32(),
+                vmw = this._vmware;
+            
+            if (id != 0 || len < 8) {
+               this._fail( 'Unknown VMware server submessage ' + id );
+            }
+            
+            vmw.supportsKeyEvent          = !!( caps & 0x02 );
+            vmw.supportsUpdateAck         = !!( caps & 0x20 );
+            vmw.supportsRequestResolution = !!( caps & 0x80 );
+            
+            if( vmw.supportsRequestResolution ) {
+                console.log( 'Server supports the VMWRequestResolution pseudo encoding' );
+            }
+
+            // If we have already been asked to send a resolution request
+            // to the server, this is the point at which it becomes legal
+            // to do so.
+            
+            if (len > 8) this._sock.rQskipBytes( len - 8 );
+            
             return true;
         },
 
@@ -1189,6 +1250,9 @@ var RFB;
 
                 case 3:  // ServerCutText
                     return this._handle_server_cut_text();
+                    
+                case 127: // VMware server message
+                    return this._handle_vmware_server_message( );
 
                 case 250:  // XVP
                     return this._handle_xvp_msg();
@@ -2060,6 +2124,10 @@ var RFB;
             if (this._sock.rQwait("ExtendedDesktopSize", this._FBU.bytes)) { return false; }
 
             this._supportsSetDesktopSize = true;
+            if( this._supportsSetDesktopSize ) {
+                console.log( 'Server supports the ExtendedDesktopSize pseudo encoding' );
+            }
+            
             var number_of_screens = this._sock.rQpeek8();
 
             this._FBU.bytes = 4 + (number_of_screens * 16);
