@@ -403,7 +403,8 @@ var RFB;
                 if (Util.get_logging() !== 'debug' || state === 'loaded') {
                     // Show noVNC logo on load and when disconnected, unless in
                     // debug mode
-                    this._display.clear();
+                    this._display.clear( 800, 600 );
+                    this._onFBResize(this, this._fb_width, this._fb_height);
                 }
             }
 

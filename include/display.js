@@ -341,7 +341,12 @@ var Display;
             this.viewportChangeSize();
         },
 
-        clear: function () {
+        clear: function (clrW, clrH) {
+            // Set clear width and height to specified values or use the 
+            // current framebuffer dimensions.
+            var width  = clrW || this._fb_width,
+                height = clrH || this._fb_height;
+            
             if (this._logo) {
                 this.resize(this._logo.width, this._logo.height);
                 this.blitStringImage(this._logo.data, 0, 0);
@@ -352,7 +357,8 @@ var Display;
                     //                   Clearing the current viewport first fixes the issue
                     this._drawCtx.clearRect(0, 0, this._viewportLoc.w, this._viewportLoc.h);
                 }
-                this.resize(240, 20);
+                //this.resize(240, 20);
+                this.resize(clrW, clrH);
                 this._drawCtx.clearRect(0, 0, this._viewportLoc.w, this._viewportLoc.h);
             }
 

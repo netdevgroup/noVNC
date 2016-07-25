@@ -1,6 +1,12 @@
 *.pyc
 *.o
+
+.project
+.pydevproject
+.settings/
+
 tests/data_*.js
 utils/rebind.so
 utils/websockify
 node_modules
+
